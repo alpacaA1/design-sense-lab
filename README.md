@@ -2,6 +2,12 @@
 
 一个用于训练组件尺寸直觉、调整真实文档排版并保存个人样式的纯前端工作台。
 
+## 在线访问
+
+<https://alpacaa1.github.io/design-sense-lab/>
+
+`main` 分支每次推送后，会通过 `.github/workflows/pages.yml` 自动部署到 GitHub Pages。
+
 ## 运行
 
 ```bash
