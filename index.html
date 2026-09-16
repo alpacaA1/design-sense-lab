@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="通过真实文档建立自己的设计判断与样式。" />
+    <title>Design Sense Lab · 设计训练工作台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#document-canvas">跳到文档画布</a>
+
+    <header class="topbar">
+      <button class="brand" id="brand-home" type="button" aria-label="返回文档工作台">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H19v16.5a1.5 1.5 0 0 1-1.5 1.5h-10A2.5 2.5 0 0 1 5 18.5v-13Z"/><path d="M8 7h7M8 11h8M8 15h5"/></svg>
+        </span>
+        <span><strong>Design Sense Lab</strong><small>Document Studio</small></span>
+      </button>
+      <nav class="studio-switcher" aria-label="工作台模式">
+        <button class="studio-switch is-active" type="button" data-studio-mode="documents" aria-current="page">文档排版</button>
+        <button class="studio-switch" type="button" data-studio-mode="components" aria-current="false">组件训练</button>
+      </nav>
+      <button class="library-trigger" id="library-trigger" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>
+        <span>My Styles</span>
+        <span class="style-count" id="style-count" aria-label="已保存 0 个样式">0</span>
+      </button>
+    </header>
+
+    <nav class="document-typebar" aria-label="文档类型">
+      <div class="type-tabs" id="type-tabs"></div>
+    </nav>
+
+    <main class="app-shell">
+      <aside class="control-panel" aria-labelledby="control-title">
+        <div class="panel-heading">
+          <p class="panel-kicker">Style controls</p>
+          <h2 id="control-title">文档参数</h2>
+          <p>调整一个值，立即查看完整页面。</p>
+        </div>
+        <div class="parameter-groups" id="parameter-groups"></div>
+      </aside>
+
+      <section class="workspace" id="workspace">
+        <header class="workspace-header">
+          <div>
+            <h1 id="workspace-title">在日常选择中重新理解设计</h1>
+          </div>
+          <div class="workspace-actions">
+            <button class="secondary-button" id="reset-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+              重置
+            </button>
+            <button class="primary-button compact" id="save-style-button" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 16h8"/></svg>
+              保存为样式
+            </button>
+          </div>
+        </header>
+
+        <div class="document-scroll" id="document-canvas" tabindex="-1">
+          <div class="document-canvas" id="document-preview" aria-label="当前文档预览"></div>
+        </div>
+      </section>
+
+      <section class="styles-view" id="styles-view" hidden>
+        <header class="styles-header">
+          <div><p class="panel-kicker">My Styles</p><h1>我的文档样式</h1><p>保存有效参数组合，在下一份文档中继续使用和修正。</p></div>
+          <button class="secondary-button" id="back-to-workspace" type="button">返回工作台</button>
+        </header>
+        <div class="style-filters" id="style-filters" role="group" aria-label="按文档类型筛选"></div>
+        <div class="styles-grid" id="styles-grid"></div>
+      </section>
+
+      <section class="component-lab-view" id="component-lab" aria-label="组件像素训练场" hidden></section>
+    </main>
+
+    <dialog class="save-dialog" id="save-style-dialog">
+      <form method="dialog" id="save-style-form">
+        <div class="dialog-heading"><p class="panel-kicker">Save style</p><h2>保存当前文档样式</h2><p>保存后可以从 My Styles 恢复这组参数。</p></div>
+        <label for="style-name">样式名称</label>
+        <input id="style-name" name="styleName" maxlength="60" autocomplete="off" />
+        <div class="dialog-actions">
+          <button class="secondary-button" value="cancel" type="button" id="cancel-save">取消</button>
+          <button class="primary-button compact" value="confirm" type="submit">保存样式</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"><span></span></div>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+.DS_Store
+.impeccable/
+artifacts/
+playwright-report/
+test-results/
