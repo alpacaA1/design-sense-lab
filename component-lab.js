@@ -3,6 +3,12 @@ const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.25;
 
+export const DIFFICULTIES = {
+  basic: { label: "基础", hint: "从常见尺度中判断二至三个相关参数。" },
+  advanced: { label: "进阶", hint: "目标会偏离常见预设一个刻度，差异更细微。" },
+  comprehensive: { label: "综合", hint: "一次判断组件的全部参数关系。" },
+};
+
 const number = (id, label, target, min, max, step = 1, unit = "px") => ({ id, label, target, min, max, step, unit });
 
 export const COMPONENT_TYPES = {
@@ -200,20 +206,126 @@ function randomDifferent(items, previousId) {
   return randomItem(candidates.length ? candidates : items);
 }
 
-export function createQuestion(type, previous) {
+function clampParameterValue(parameter, value) {
+  const clamped = Math.min(parameter.max, Math.max(parameter.min, value));
+  const steps = Math.round((clamped - parameter.min) / parameter.step);
+  return Number((parameter.min + steps * parameter.step).toFixed(4));
+}
+
+function advancedTargets(config, preset, parameterIds) {
+  const targets = { ...preset.values };
+  parameterIds.forEach((id, index) => {
+    const parameter = config.parameters.find((item) => item.id === id);
+    if (!parameter) return;
+    const direction = (preset.id.length + id.length + index) % 2 === 0 ? 1 : -1;
+    let next = clampParameterValue(parameter, targets[id] + direction * parameter.step);
+    if (next === targets[id]) next = clampParameterValue(parameter, targets[id] - direction * parameter.step);
+    targets[id] = next;
+  });
+  return targets;
+}
+
+export function createQuestion(type, previous, { difficulty = "basic", preferredParameterId } = {}) {
   const bank = QUESTION_BANK[type];
+  const config = COMPONENT_TYPES[type];
   const preset = randomDifferent(bank.presets, previous?.presetId);
-  const group = randomDifferent(bank.groups, previous?.groupId);
+  const preferredGroups = preferredParameterId
+    ? bank.groups.filter((item) => item.parameters.includes(preferredParameterId))
+    : bank.groups;
+  const group = randomDifferent(preferredGroups.length ? preferredGroups : bank.groups, previous?.groupId);
+  const parameterIds = difficulty === "comprehensive"
+    ? config.parameters.map((parameter) => parameter.id)
+    : [...group.parameters];
+  const targets = difficulty === "advanced"
+    ? advancedTargets(config, preset, parameterIds)
+    : { ...preset.values };
   return {
-    id: `${type}:${preset.id}:${group.id}`,
+    id: `${type}:${preset.id}:${group.id}:${difficulty}`,
     presetId: preset.id,
     presetLabel: preset.label,
     groupId: group.id,
-    groupLabel: group.label,
-    parameterIds: [...group.parameters],
-    targets: { ...preset.values },
-    difficulty: "基础",
+    groupLabel: difficulty === "comprehensive" ? "全参数综合" : group.label,
+    parameterIds,
+    targets,
+    difficulty: DIFFICULTIES[difficulty]?.label ?? DIFFICULTIES.basic.label,
+    difficultyId: DIFFICULTIES[difficulty] ? difficulty : "basic",
+    focusParameterId: preferredParameterId && parameterIds.includes(preferredParameterId) ? preferredParameterId : null,
   };
+}
+
+export function analyzeSessions(sessions) {
+  const buckets = new Map();
+  const append = (session, point) => {
+    const config = COMPONENT_TYPES[session?.type];
+    const parameter = config?.parameters.find((item) => item.id === point.parameterId);
+    const key = `${session.type}:${point.parameterId}`;
+    const bucket = buckets.get(key) ?? {
+      key,
+      type: session.type,
+      componentLabel: point.componentLabel ?? config?.zh ?? session.type,
+      parameterId: point.parameterId,
+      parameterLabel: point.parameterLabel ?? parameter?.label ?? point.parameterId,
+      unit: point.unit ?? parameter?.unit ?? "px",
+      points: [],
+    };
+    bucket.points.push({ signed: point.signed, absolute: point.absolute });
+    buckets.set(key, bucket);
+  };
+  [...sessions].reverse().forEach((session) => {
+    const config = COMPONENT_TYPES[session?.type];
+    const storedErrors = session?.analysis?.version === 1 && Array.isArray(session.analysis.errors)
+      ? session.analysis.errors
+      : null;
+    if (storedErrors) {
+      storedErrors.forEach((error) => {
+        const signed = Number(error.signedSteps);
+        const absolute = Number(error.absoluteSteps);
+        if (!error.parameterId || !Number.isFinite(signed) || !Number.isFinite(absolute)) return;
+        append(session, { ...error, signed, absolute });
+      });
+      return;
+    }
+
+    // Backward compatibility for existing v1 records that predate normalized error snapshots.
+    const ids = session?.question?.parameterIds;
+    if (!config || !Array.isArray(ids)) return;
+    ids.forEach((parameterId) => {
+      const parameter = config.parameters.find((item) => item.id === parameterId);
+      const current = Number(session?.values?.[parameterId]);
+      const target = Number(session?.targets?.[parameterId]);
+      if (!parameter || !Number.isFinite(current) || !Number.isFinite(target)) return;
+      append(session, {
+        parameterId,
+        componentLabel: config.zh,
+        parameterLabel: parameter.label,
+        unit: parameter.unit,
+        signed: (current - target) / parameter.step,
+        absolute: Math.abs(current - target) / parameter.step,
+      });
+    });
+  });
+
+  return [...buckets.values()].map((bucket) => {
+    const count = bucket.points.length;
+    const average = (items, field) => items.reduce((sum, item) => sum + item[field], 0) / items.length;
+    const meanSignedSteps = average(bucket.points, "signed");
+    const meanAbsoluteSteps = average(bucket.points, "absolute");
+    let movement = "样本积累中";
+    if (count >= 4) {
+      const midpoint = Math.floor(count / 2);
+      const earlier = average(bucket.points.slice(0, midpoint), "absolute");
+      const recent = average(bucket.points.slice(midpoint), "absolute");
+      movement = recent <= earlier - 0.5 ? "正在改善" : recent >= earlier + 0.5 ? "近期波动" : "保持稳定";
+    }
+    return {
+      ...bucket,
+      count,
+      meanSignedSteps,
+      meanAbsoluteSteps,
+      direction: Math.abs(meanSignedSteps) < 0.25 ? "偏向不明显" : meanSignedSteps > 0 ? "经常高估" : "经常低估",
+      movement,
+    };
+  }).sort((a, b) => b.meanAbsoluteSteps - a.meanAbsoluteSteps || b.count - a.count);
 }
 
 function randomStartValue(parameter, target) {
@@ -314,6 +426,32 @@ function errorMarkup(config, values, question) {
   </aside>`;
 }
 
+function trendMarkup(sessions) {
+  const trends = analyzeSessions(sessions);
+  const reliable = trends.filter((item) => item.count >= 2);
+  if (!sessions.length) {
+    return `<section class="trend-view" tabindex="-1" aria-labelledby="trend-title">
+      <header><div><span>训练复盘</span><h2 id="trend-title">偏差趋势</h2><p>完成训练并保存结果后，这里会汇总你经常高估或低估的尺寸。</p></div><button class="secondary-button" type="button" data-close-trends>返回训练</button></header>
+      <div class="trend-empty"><strong>还没有可分析的训练记录</strong><span>先完成一轮猜尺寸或临摹匹配，并在揭晓后保存结果。</span></div>
+    </section>`;
+  }
+
+  const top = reliable[0];
+  const rows = trends.map((item) => {
+    const width = Math.min(100, Math.round(item.meanAbsoluteSteps / 4 * 100));
+    return `<li>
+      <div><strong>${item.componentLabel} · ${item.parameterLabel}</strong><span>${item.count} 次判断 · ${item.direction}</span></div>
+      <div class="trend-meter" aria-label="平均偏差 ${item.meanAbsoluteSteps.toFixed(1)} 个刻度"><i style="width:${width}%"></i></div>
+      <span>${item.meanAbsoluteSteps.toFixed(1)} 刻度</span><em>${item.movement}</em>
+    </li>`;
+  }).join("");
+  return `<section class="trend-view" tabindex="-1" aria-labelledby="trend-title">
+    <header><div><span>训练复盘 · 最近 ${sessions.length} 次</span><h2 id="trend-title">偏差趋势</h2><p>${top ? `当前最值得校准的是${top.componentLabel}的${top.parameterLabel}。至少两次样本后才会开放专项复练。` : "记录正在积累；同一参数至少出现两次后才会判断弱项。"}</p></div><button class="secondary-button" type="button" data-close-trends>返回训练</button></header>
+    ${top ? `<div class="trend-focus"><div><span>当前弱项</span><strong>${top.componentLabel} · ${top.parameterLabel}</strong><small>${top.direction}，平均偏差 ${top.meanAbsoluteSteps.toFixed(1)} 个刻度</small></div><button class="primary-button" type="button" data-start-weak-practice data-weak-key="${top.key}">开始专项复练</button></div>` : `<div class="trend-notice">再保存一些同类训练结果，即可开启弱项复练。</div>`}
+    <ol class="trend-list" aria-label="参数偏差趋势">${rows}</ol>
+  </section>`;
+}
+
 function measurementMarkup(type, values) {
   return `<div class="measurement-frame">
     <span class="dimension-line dimension-width"><i data-measure-width>你的宽度</i></span>
@@ -347,6 +485,10 @@ export function initComponentLab(root, { showToast } = {}) {
     revealed: false,
     confirmed: false,
     zoom: 1,
+    difficulty: "basic",
+    view: "training",
+    weakPractice: null,
+    currentSaved: false,
     questions,
     values: Object.fromEntries(Object.entries(COMPONENT_TYPES).map(([id, currentConfig]) => [id, initialTrainingValues(currentConfig, questions[id])])),
     sessions: readSessions(),
@@ -360,14 +502,23 @@ export function initComponentLab(root, { showToast } = {}) {
     return state.questions[state.type];
   }
 
+  function weakness() {
+    if (!state.weakPractice) return null;
+    return analyzeSessions(state.sessions).find((item) => item.key === state.weakPractice && item.count >= 2) ?? null;
+  }
+
   function resetExercise() {
     state.revealed = false;
     state.confirmed = false;
+    state.currentSaved = false;
     if (state.mode !== "free") state.zoom = 1;
     if (state.mode === "free") {
       state.values[state.type] = targetValues(config());
     } else {
-      state.questions[state.type] = createQuestion(state.type, question());
+      state.questions[state.type] = createQuestion(state.type, question(), {
+        difficulty: state.difficulty,
+        preferredParameterId: weakness()?.parameterId,
+      });
       state.values[state.type] = initialTrainingValues(config(), question());
     }
     if (state.mode === "guess") {
@@ -393,8 +544,19 @@ export function initComponentLab(root, { showToast } = {}) {
   function questionMarkup(currentConfig, currentQuestion) {
     if (state.mode === "free") return "";
     const labels = currentQuestion.parameterIds.map((id) => currentConfig.parameters.find((item) => item.id === id)?.label).filter(Boolean);
-    return `<div class="training-question" data-question-id="${currentQuestion.id}" data-preset-id="${currentQuestion.presetId}" data-group-id="${currentQuestion.groupId}">
-      <span>本轮主题</span><strong>${currentQuestion.groupLabel}</strong><small>${labels.join(" · ")}</small>
+    return `<div class="training-question" data-question-id="${currentQuestion.id}" data-preset-id="${currentQuestion.presetId}" data-group-id="${currentQuestion.groupId}" data-difficulty="${currentQuestion.difficultyId}">
+      <span>本轮主题</span><strong>${currentQuestion.groupLabel}</strong><small>${currentQuestion.difficulty}${currentQuestion.focusParameterId ? " · 弱项复练" : ""} · ${labels.join(" · ")}</small>
+    </div>`;
+  }
+
+  function difficultyMarkup() {
+    if (state.mode === "free") return "";
+    return `<div class="difficulty-control">
+      <span class="training-label">训练难度</span>
+      <div class="difficulty-tabs" role="group" aria-label="训练难度">
+        ${Object.entries(DIFFICULTIES).map(([id, item]) => `<button type="button" data-difficulty="${id}" aria-pressed="${state.difficulty === id}" class="${state.difficulty === id ? "is-active" : ""}">${item.label}</button>`).join("")}
+      </div>
+      <p>${DIFFICULTIES[state.difficulty].hint}</p>
     </div>`;
   }
 
@@ -449,6 +611,14 @@ export function initComponentLab(root, { showToast } = {}) {
       : currentConfig.parameters;
     const targets = training ? currentQuestion.targets : targetValues(currentConfig);
     if (!training) state.preview = "current";
+    if (state.view === "trends") {
+      root.innerHTML = `<aside class="training-panel">
+        <header class="training-heading"><p class="panel-kicker">Pixel training</p><h1>组件像素训练</h1><p>复盘保存的判断，找到反复出现的尺寸偏差。</p></header>
+        <div class="training-section"><button class="history-entry is-active" type="button" data-close-trends aria-current="page"><strong>偏差趋势</strong><span>${state.sessions.length} 条记录</span></button></div>
+      </aside><section class="training-workspace">${trendMarkup(state.sessions)}</section>`;
+      bind();
+      return;
+    }
     root.innerHTML = `
       <aside class="training-panel">
         <header class="training-heading">
@@ -462,8 +632,11 @@ export function initComponentLab(root, { showToast } = {}) {
             ${Object.entries(MODES).map(([id, mode]) => `<button type="button" data-training-mode="${id}" aria-pressed="${state.mode === id}" class="${state.mode === id ? "is-active" : ""}">${mode.label}</button>`).join("")}
           </div>
           <p class="training-mode-hint">${MODES[state.mode].hint}</p>
+          ${difficultyMarkup()}
           ${progressMarkup()}
           ${questionMarkup(currentConfig, currentQuestion)}
+          ${state.weakPractice ? `<div class="weak-practice-note"><span>专项复练中</span><button type="button" data-stop-weak-practice>退出专项</button></div>` : ""}
+          <button class="history-entry" type="button" data-open-trends><strong>查看偏差趋势</strong><span>${state.sessions.length ? `${state.sessions.length} 条记录` : "保存结果后生成"}</span></button>
         </div>
         <div class="training-parameters ${controlsLocked ? "is-locked" : ""}">
           ${visibleParameters.map((parameter) => {
@@ -578,6 +751,37 @@ export function initComponentLab(root, { showToast } = {}) {
   }
 
   function bind() {
+    root.querySelectorAll("[data-difficulty]").forEach((button) => button.addEventListener("click", () => {
+      state.difficulty = button.dataset.difficulty;
+      resetExercise();
+      render();
+    }));
+    root.querySelector("[data-open-trends]")?.addEventListener("click", () => {
+      state.view = "trends";
+      render();
+      window.requestAnimationFrame(() => root.querySelector(".trend-view")?.focus({ preventScroll: true }));
+    });
+    root.querySelectorAll("[data-close-trends]").forEach((button) => button.addEventListener("click", () => {
+      state.view = "training";
+      render();
+    }));
+    root.querySelector("[data-start-weak-practice]")?.addEventListener("click", (event) => {
+      const selected = analyzeSessions(state.sessions).find((item) => item.key === event.currentTarget.dataset.weakKey && item.count >= 2);
+      if (!selected) return;
+      state.weakPractice = selected.key;
+      state.type = selected.type;
+      state.mode = "guess";
+      state.view = "training";
+      resetExercise();
+      render();
+      showToast?.(`开始复练${selected.componentLabel}的${selected.parameterLabel}`);
+    });
+    root.querySelector("[data-stop-weak-practice]")?.addEventListener("click", () => {
+      state.weakPractice = null;
+      resetExercise();
+      render();
+      showToast?.("已退出弱项复练");
+    });
     root.querySelectorAll("[data-training-mode]").forEach((button) => button.addEventListener("click", () => {
       state.mode = button.dataset.trainingMode;
       resetExercise();
@@ -585,6 +789,7 @@ export function initComponentLab(root, { showToast } = {}) {
     }));
     root.querySelectorAll("[data-component-type]").forEach((button) => button.addEventListener("click", () => {
       state.type = button.dataset.componentType;
+      if (weakness()?.type !== state.type) state.weakPractice = null;
       resetExercise();
       render();
     }));
@@ -649,6 +854,11 @@ export function initComponentLab(root, { showToast } = {}) {
       render();
     });
     root.querySelector("[data-save-training]")?.addEventListener("click", () => {
+      if (state.currentSaved) {
+        showToast?.("本轮训练结果已经保存");
+        return;
+      }
+      const analysisResults = resultData(config(), state.values[state.type], question()).results;
       const item = {
         id: Date.now(), type: state.type, mode: state.mode,
         values: { ...state.values[state.type] },
@@ -661,6 +871,18 @@ export function initComponentLab(root, { showToast } = {}) {
           groupLabel: question().groupLabel,
           parameterIds: [...question().parameterIds],
           difficulty: question().difficulty,
+          difficultyId: question().difficultyId,
+        },
+        analysis: {
+          version: 1,
+          errors: analysisResults.map((result) => ({
+            parameterId: result.parameter.id,
+            componentLabel: config().zh,
+            parameterLabel: result.parameter.label,
+            unit: result.parameter.unit,
+            signedSteps: result.delta / result.parameter.step,
+            absoluteSteps: result.distance,
+          })),
         },
         date: new Date().toISOString(),
       };
@@ -668,6 +890,12 @@ export function initComponentLab(root, { showToast } = {}) {
       state.sessions = state.sessions.slice(0, 30);
       try {
         localStorage.setItem(SESSION_KEY, JSON.stringify(state.sessions));
+        state.currentSaved = true;
+        const saveButton = root.querySelector("[data-save-training]");
+        if (saveButton) {
+          saveButton.disabled = true;
+          saveButton.textContent = "已保存";
+        }
         showToast?.(`已保存 ${config().zh} 训练结果`);
       } catch {
         state.sessions.shift();

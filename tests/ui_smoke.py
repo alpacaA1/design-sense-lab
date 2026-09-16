@@ -60,9 +60,17 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="组件训练", exact=True).click()
     assert page.locator("#component-lab").is_visible()
     assert page.locator(".document-typebar").is_hidden()
+    assert page.locator("#skip-link").get_attribute("href") == "#component-lab"
+    assert page.locator("#skip-link").inner_text() == "跳到组件训练"
     assert page.locator(".component-rail button").count() == 7
     assert page.locator(".training-button").count() == 2
     assert page.get_by_role("button", name="猜尺寸", exact=True).get_attribute("aria-pressed") == "true"
+    assert page.get_by_role("button", name="基础", exact=True).get_attribute("aria-pressed") == "true"
+    assert all(size >= 12 for size in page.locator(".training-mode-hint, .training-question small, .training-parameter small").evaluate_all("els => els.map(el => parseFloat(getComputedStyle(el).fontSize))"))
+    assert all(height >= 40 for height in page.locator(".difficulty-tabs button, .stage-zoom button").evaluate_all("els => els.map(el => el.getBoundingClientRect().height)"))
+    page.get_by_role("button", name="进阶", exact=True).click()
+    assert page.locator(".training-question").get_attribute("data-difficulty") == "advanced"
+    page.get_by_role("button", name="基础", exact=True).click()
     assert page.get_by_label("训练进度").locator(".is-active").inner_text().find("观察目标") >= 0
     assert 2 <= page.locator(".training-parameter").count() <= 3
     assert page.locator(".training-question").is_visible()
@@ -114,14 +122,34 @@ with sync_playwright() as playwright:
     assert page.get_by_label("叠加视图图例").is_visible()
     assert "原始尺寸" in page.locator(".stage-scale").inner_text()
     assert page.locator(".training-stage").get_attribute("data-stage-view") == "overlay"
-    page.get_by_role("button", name="保存结果").click()
+    page.get_by_role("button", name="保存结果", exact=True).click()
+    assert page.get_by_role("button", name="已保存", exact=True).is_disabled()
     assert page.evaluate("JSON.parse(localStorage.getItem('design-sense-component-sessions-v1')).length") == 1
     saved_question = page.evaluate("JSON.parse(localStorage.getItem('design-sense-component-sessions-v1'))[0].question")
+    saved_analysis = page.evaluate("JSON.parse(localStorage.getItem('design-sense-component-sessions-v1'))[0].analysis")
     assert saved_question["presetId"]
     assert saved_question["groupId"]
     assert 2 <= len(saved_question["parameterIds"]) <= 3
+    assert saved_analysis["version"] == 1
+    assert len(saved_analysis["errors"]) == len(saved_question["parameterIds"])
+    page.evaluate("""() => {
+      const key = 'design-sense-component-sessions-v1';
+      const sessions = JSON.parse(localStorage.getItem(key));
+      sessions.push({ ...sessions[0], id: sessions[0].id + 1, date: new Date(Date.now() - 1000).toISOString() });
+      localStorage.setItem(key, JSON.stringify(sessions));
+    }""")
+    page.reload()
+    page.wait_for_load_state("networkidle")
+    page.get_by_role("button", name="组件训练", exact=True).click()
+    page.get_by_role("button", name="查看偏差趋势").click()
+    assert page.get_by_role("heading", name="偏差趋势").is_visible()
+    assert page.get_by_role("button", name="开始专项复练").is_visible()
+    page.screenshot(path=str(ARTIFACTS / "component-lab-trends.png"), full_page=True)
+    page.get_by_role("button", name="开始专项复练").click()
+    assert page.get_by_text("专项复练中").is_visible()
+    assert "弱项复练" in page.locator(".training-question").inner_text()
     page.screenshot(path=str(ARTIFACTS / "component-lab-desktop.png"), full_page=True)
-    page.get_by_role("button", name="换一个组件").click()
+    page.locator('[data-component-type="input"]').click()
     assert page.locator(".component-rail button.is-active span").inner_text() == "Input"
     page.get_by_role("button", name="临摹匹配", exact=True).click()
     assert page.locator(".preview-switch").is_visible()

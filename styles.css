@@ -414,6 +414,12 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
 .training-mode-tabs button { min-height: 32px; padding: 0 5px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 600; }
 .training-mode-tabs button.is-active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 3px rgba(20, 20, 19, .1); }
 .training-mode-hint { min-height: 29px; margin: 8px 0 0; color: var(--ink-soft); font-size: 10px; line-height: 1.5; }
+.difficulty-control { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.difficulty-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.difficulty-tabs button { min-height: 40px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--ink-soft); cursor: pointer; font-size: 12px; font-weight: 620; }
+.difficulty-tabs button:hover { border-color: var(--border-strong); background: var(--surface-subtle); }
+.difficulty-tabs button.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.difficulty-control > p { min-height: 36px; margin: 7px 0 0; color: var(--ink-soft); font-size: 12px; line-height: 1.5; }
 .training-progress { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 13px 0 0; padding: 0; list-style: none; }
 .training-progress::before { position: absolute; top: 8px; right: 16%; left: 16%; height: 1px; background: var(--border-strong); content: ""; }
 .training-progress li { position: relative; display: grid; justify-items: center; gap: 4px; color: var(--muted); font-size: 8px; text-align: center; }
@@ -425,6 +431,12 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
 .training-question span { color: var(--muted); font-size: 9px; }
 .training-question strong { color: var(--primary); font-size: 11px; }
 .training-question small { grid-column: 2; color: var(--ink-soft); font-size: 9px; line-height: 1.45; }
+.weak-practice-note { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 0 10px; border: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border)); border-radius: var(--radius-xs); background: var(--primary-soft); color: var(--primary); font-size: 12px; font-weight: 650; }
+.weak-practice-note button { min-height: 40px; padding: 0; border: 0; background: transparent; color: var(--primary); cursor: pointer; font: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.history-entry { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-xs); background: var(--surface); color: var(--ink); cursor: pointer; text-align: left; }
+.history-entry:hover, .history-entry.is-active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+.history-entry strong, .history-entry span { font-size: 12px; }
+.history-entry span { color: var(--ink-soft); font-weight: 500; }
 .training-parameters { background: var(--surface-subtle); }
 .training-parameters.is-locked .training-parameter > div { opacity: .38; }
 .training-parameter { display: block; padding: 13px 16px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
@@ -555,7 +567,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
 .training-sidebar small { margin-top: auto; color: var(--muted); font-size: 9px; }
 
 .training-feedback { display: flex; min-height: 380px; flex-direction: column; padding: 20px; border: 1px solid var(--border); background: var(--surface); }
-.training-feedback:focus { outline: none; }
+.training-feedback:focus { outline: 3px solid color-mix(in oklch, var(--focus) 38%, transparent); outline-offset: -3px; }
 .training-feedback > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .training-feedback > header div { display: grid; gap: 3px; }
 .training-feedback > header span { color: var(--primary); font-size: 10px; font-weight: 700; }
@@ -594,6 +606,79 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
 .training-result li.is-exact em { color: var(--positive); }
 .save-training-button { display: block; min-height: 38px; margin: 12px auto 0; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-soft); cursor: pointer; font-size: 10px; font-weight: 650; }
 .save-training-button:hover { border-color: var(--primary); color: var(--primary); }
+
+.trend-view { min-width: 0; min-height: 0; padding: 30px clamp(22px, 4vw, 56px) 48px; overflow: auto; }
+.trend-view:focus { outline: 3px solid color-mix(in oklch, var(--focus) 30%, transparent); outline-offset: -3px; }
+.trend-view > header { display: flex; max-width: 920px; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 22px; border-bottom: 1px solid var(--border); }
+.trend-view > header div { max-width: 66ch; }
+.trend-view > header span { color: var(--primary); font-size: 12px; font-weight: 700; }
+.trend-view > header h2 { margin: 5px 0 6px; font-size: 24px; letter-spacing: -.03em; }
+.trend-view > header p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+.trend-view > header .secondary-button { min-height: 40px; flex: 0 0 auto; }
+.trend-empty { display: grid; min-height: 320px; max-width: 920px; place-content: center; gap: 7px; border-bottom: 1px solid var(--border); text-align: center; }
+.trend-empty strong { font-size: 16px; }
+.trend-empty span, .trend-notice { color: var(--ink-soft); font-size: 13px; }
+.trend-focus { display: flex; max-width: 920px; min-height: 112px; align-items: center; justify-content: space-between; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.trend-focus > div { display: grid; gap: 3px; }
+.trend-focus span { color: var(--muted); font-size: 12px; }
+.trend-focus strong { font-size: 17px; }
+.trend-focus small { color: var(--ink-soft); font-size: 12px; }
+.trend-focus .primary-button { min-height: 40px; }
+.trend-notice { max-width: 920px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+.trend-list { display: grid; max-width: 920px; margin: 0; padding: 0; list-style: none; }
+.trend-list li { display: grid; min-height: 72px; grid-template-columns: minmax(190px, 1.5fr) minmax(120px, 1fr) 90px 100px; align-items: center; gap: 18px; border-bottom: 1px solid var(--border); }
+.trend-list li > div:first-child { display: grid; gap: 3px; }
+.trend-list strong { font-size: 13px; }
+.trend-list span, .trend-list em { color: var(--ink-soft); font-size: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
+.trend-meter { height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-subtle); }
+.trend-meter i { display: block; height: 100%; border-radius: inherit; background: var(--primary); }
+
+/* Component Lab accessibility baseline: interface copy is at least 12px and core targets at least 40px. */
+.component-lab-view .training-heading p:last-child,
+.component-lab-view .training-label,
+.component-lab-view .training-mode-tabs button,
+.component-lab-view .training-mode-hint,
+.component-lab-view .training-question span,
+.component-lab-view .training-question strong,
+.component-lab-view .training-question small,
+.component-lab-view .training-parameter strong,
+.component-lab-view .training-parameter small,
+.component-lab-view .training-number input,
+.component-lab-view .training-number i,
+.component-lab-view .answer-confirm,
+.component-lab-view .training-toolbar span,
+.component-lab-view .component-rail span,
+.component-lab-view .component-rail small,
+.component-lab-view .stage-contextbar .stage-scale,
+.component-lab-view .stage-zoom button,
+.component-lab-view .free-mode-label,
+.component-lab-view .preview-switch button,
+.component-lab-view .comparison-legend,
+.component-lab-view .training-feedback > header span,
+.component-lab-view .training-feedback > header small,
+.component-lab-view .training-priorities li,
+.component-lab-view .training-priorities li small,
+.component-lab-view .training-insight strong,
+.component-lab-view .training-insight span,
+.component-lab-view .training-feedback summary,
+.component-lab-view .training-result-list li,
+.component-lab-view .dimension-line,
+.component-lab-view .measurement-relations,
+.component-lab-view .measurement-relations small,
+.component-lab-view .text-button { font-size: 12px; }
+.component-lab-view .training-mode-tabs button,
+.component-lab-view .primary-button,
+.component-lab-view .secondary-button,
+.component-lab-view .preview-switch button,
+.component-lab-view .stage-zoom button,
+.component-lab-view .text-button { min-height: 40px; }
+.component-lab-view .training-number { height: 40px; }
+.component-lab-view .stage-contextbar { min-height: 40px; }
+.component-lab-view .stage-zoom { height: 40px; grid-template-columns: 40px 60px 40px; }
+.component-lab-view .training-progress li { font-size: 11px; }
+.component-lab-view .training-progress li span { width: 20px; height: 20px; font-size: 11px; }
+.component-lab-view .training-progress::before { top: 10px; }
+.component-lab-view .preview-switch { height: 40px; }
 
 @media (max-width: 1100px) {
   :root { --control-width: 250px; }
@@ -645,6 +730,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
   .stage-contextbar, .training-main { min-width: 620px; }
   .training-stage, .training-main.has-result .training-stage { min-width: 620px; min-height: 420px; }
   .training-feedback { min-width: 620px; }
+  .trend-view { min-width: 620px; padding: 24px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

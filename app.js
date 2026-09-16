@@ -46,6 +46,7 @@ const elements = {
   brandHome: document.querySelector("#brand-home"),
   toast: document.querySelector("#toast"),
   componentLab: document.querySelector("#component-lab"),
+  skipLink: document.querySelector("#skip-link"),
   studioSwitches: [...document.querySelectorAll("[data-studio-mode]")],
 };
 
@@ -144,6 +145,8 @@ function setStudioMode(mode) {
   document.body.dataset.studio = mode;
   elements.typebar.hidden = isComponents;
   elements.libraryTrigger.hidden = isComponents;
+  elements.skipLink.href = isComponents ? "#component-lab" : "#document-canvas";
+  elements.skipLink.textContent = isComponents ? "跳到组件训练" : "跳到文档画布";
   elements.studioSwitches.forEach((button) => {
     const active = button.dataset.studioMode === mode;
     button.classList.toggle("is-active", active);
