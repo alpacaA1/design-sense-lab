@@ -62,6 +62,7 @@ with sync_playwright() as playwright:
     assert page.locator(".document-typebar").is_hidden()
     assert page.locator("#skip-link").get_attribute("href") == "#component-lab"
     assert page.locator("#skip-link").inner_text() == "跳到组件训练"
+    assert page.locator(".training-panel").evaluate("el => getComputedStyle(el).scrollbarWidth") == "none"
     assert page.locator(".component-rail button").count() == 7
     assert page.locator(".training-button").count() == 2
     assert page.get_by_role("button", name="猜尺寸", exact=True).get_attribute("aria-pressed") == "true"

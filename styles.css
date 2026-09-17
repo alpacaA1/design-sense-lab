@@ -404,7 +404,15 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border: 3px s
 
 /* Component Lab */
 .component-lab-view { grid-column: 1 / -1; display: grid; min-width: 0; min-height: 0; grid-template-columns: 304px minmax(0, 1fr); background: var(--bg); }
-.training-panel { min-height: 0; overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); scrollbar-width: thin; }
+.training-panel {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.training-panel::-webkit-scrollbar { display: none; }
 .training-heading { padding: 23px 20px 19px; border-bottom: 1px solid var(--border); }
 .training-heading h1 { margin: 0; font-size: 19px; letter-spacing: -.03em; }
 .training-heading p:last-child { max-width: 27em; margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; text-wrap: pretty; }
