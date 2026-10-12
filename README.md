@@ -37,6 +37,10 @@ python3 -m http.server 4317
 - My Styles 保存、筛选和恢复完整参数组合
 - 每种文档类型拥有独立参数状态
 - 浏览器本地持久化、响应式布局、键盘操作和减少动态支持
+- 提示词笔记：标题、原文、自己的理解与可选技术标签，支持新建、编辑、全文检索、技术筛选和一键复制
+- 笔记首次打开提供可编辑的水彩动画提示词示例；数据独立保存在当前浏览器，可导出 JSON 备份并在另一台设备合并导入，重复内容跳过、冲突内容另存
+- 保存和导入前检查本地数据是否已被另一窗口更新；若有变化，保留编辑内容并提示复制、刷新，避免旧页面覆盖新记录
+- 提示词笔记按需加载；直接访问 `#prompts` 可打开笔记列表
 
 ## 文件结构
 
@@ -47,12 +51,16 @@ python3 -m http.server 4317
 - `styles-library.js`：My Styles 筛选与恢复
 - `component-lab.js`：组件训练配置、预览、误差与本地记录
 - `app.js`：工作台协调
+- `prompt-notes.js` / `prompt-notes-store.js` / `prompt-notes.css`：轻量提示词笔记、独立本地存储与样式
 
 ## 验证
 
 ```bash
 node --experimental-default-type=module tests/state_test.mjs
+node --experimental-default-type=module tests/prompt_notes_test.mjs
 ```
+
+启动本地服务后，可运行 `python3 tests/prompt_notes_ui_smoke.py` 验证笔记的保存、复制、备份合并与手机布局。
 
 浏览器验收覆盖桌面端和 390px 手机宽度。
 

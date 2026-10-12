@@ -6,6 +6,7 @@
     <meta name="description" content="通过真实文档建立自己的设计判断与样式。" />
     <title>Design Sense Lab · 设计训练工作台</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="prompt-notes.css" />
   </head>
   <body>
     <a class="skip-link" id="skip-link" href="#document-canvas">跳到文档画布</a>
@@ -20,6 +21,7 @@
       <nav class="studio-switcher" aria-label="工作台模式">
         <button class="studio-switch is-active" type="button" data-studio-mode="documents" aria-current="page">文档排版</button>
         <button class="studio-switch" type="button" data-studio-mode="components" aria-current="false">组件训练</button>
+        <button class="studio-switch" type="button" data-studio-mode="prompts" aria-current="false">提示词笔记</button>
       </nav>
       <button class="library-trigger" id="library-trigger" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>
@@ -74,6 +76,7 @@
       </section>
 
       <section class="component-lab-view" id="component-lab" aria-label="组件像素训练场" hidden></section>
+      <section class="prompt-notes-view" id="prompt-notes" aria-label="提示词笔记" tabindex="-1" hidden></section>
     </main>
 
     <dialog class="save-dialog" id="save-style-dialog">

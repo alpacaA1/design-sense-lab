@@ -46,11 +46,14 @@ const elements = {
   brandHome: document.querySelector("#brand-home"),
   toast: document.querySelector("#toast"),
   componentLab: document.querySelector("#component-lab"),
+  promptNotes: document.querySelector("#prompt-notes"),
   skipLink: document.querySelector("#skip-link"),
   studioSwitches: [...document.querySelectorAll("[data-studio-mode]")],
 };
 
 let componentLab;
+let promptNotes;
+let promptNotesLoading;
 
 function current() {
   return {
@@ -124,7 +127,9 @@ function contrastRatio(foreground, background) {
 }
 
 function showWorkspace() {
+  if (promptNotes && !promptNotes.canLeave()) return;
   setStudioMode("documents");
+  elements.promptNotes.hidden = true;
   elements.controlPanel.hidden = false;
   elements.workspace.hidden = false;
   elements.stylesView.hidden = true;
@@ -132,7 +137,9 @@ function showWorkspace() {
 }
 
 function showLibrary() {
+  if (promptNotes && !promptNotes.canLeave()) return;
   setStudioMode("documents");
+  elements.promptNotes.hidden = true;
   elements.controlPanel.hidden = true;
   elements.workspace.hidden = true;
   elements.stylesView.hidden = false;
@@ -141,12 +148,15 @@ function showLibrary() {
 }
 
 function setStudioMode(mode) {
-  const isComponents = mode === "components";
+  const isDocuments = mode === "documents";
   document.body.dataset.studio = mode;
-  elements.typebar.hidden = isComponents;
-  elements.libraryTrigger.hidden = isComponents;
-  elements.skipLink.href = isComponents ? "#component-lab" : "#document-canvas";
-  elements.skipLink.textContent = isComponents ? "跳到组件训练" : "跳到文档画布";
+  elements.brandHome.querySelector("small").textContent = mode === "prompts" ? "Prompt Notes" : mode === "components" ? "Component Lab" : "Document Studio";
+  elements.typebar.hidden = !isDocuments;
+  elements.libraryTrigger.hidden = !isDocuments;
+  elements.skipLink.href = mode === "prompts" ? "#prompt-notes" : mode === "components" ? "#component-lab" : "#document-canvas";
+  elements.skipLink.textContent = mode === "prompts" ? "跳到提示词笔记" : mode === "components" ? "跳到组件训练" : "跳到文档画布";
+  if (mode === "prompts") history.replaceState(null, "", `${location.pathname}${location.search}#prompts`);
+  else if (location.hash === "#prompts") history.replaceState(null, "", `${location.pathname}${location.search}`);
   elements.studioSwitches.forEach((button) => {
     const active = button.dataset.studioMode === mode;
     button.classList.toggle("is-active", active);
@@ -155,12 +165,33 @@ function setStudioMode(mode) {
 }
 
 function showComponentLab() {
+  if (promptNotes && !promptNotes.canLeave()) return;
   setStudioMode("components");
+  elements.promptNotes.hidden = true;
   elements.controlPanel.hidden = true;
   elements.workspace.hidden = true;
   elements.stylesView.hidden = true;
   elements.componentLab.hidden = false;
   componentLab?.refresh();
+}
+
+async function showPromptNotes() {
+  setStudioMode("prompts");
+  elements.controlPanel.hidden = true;
+  elements.workspace.hidden = true;
+  elements.stylesView.hidden = true;
+  elements.componentLab.hidden = true;
+  elements.promptNotes.hidden = false;
+  if (!promptNotesLoading) {
+    elements.promptNotes.textContent = "正在打开提示词笔记…";
+    promptNotesLoading = import("./prompt-notes.js").then(({ initPromptNotes }) => {
+      promptNotes = initPromptNotes(elements.promptNotes, { showToast });
+    }).catch(() => {
+      elements.promptNotes.textContent = "笔记模块加载失败，请刷新后重试。";
+      promptNotesLoading = null;
+    });
+  }
+  await promptNotesLoading;
 }
 
 function renderLibrary() {
@@ -227,6 +258,7 @@ elements.brandHome.addEventListener("click", () => {
 elements.studioSwitches.forEach((button) => {
   button.addEventListener("click", () => {
     if (button.dataset.studioMode === "components") showComponentLab();
+    else if (button.dataset.studioMode === "prompts") showPromptNotes();
     else {
       showWorkspace();
       renderWorkspace();
@@ -236,3 +268,4 @@ elements.studioSwitches.forEach((button) => {
 
 componentLab = initComponentLab(elements.componentLab, { showToast });
 renderWorkspace();
+if (location.hash === "#prompts") showPromptNotes();
