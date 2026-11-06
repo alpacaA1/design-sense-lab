@@ -2,6 +2,8 @@ import { CATEGORY_ORDER, DOCUMENT_TYPES, allParameters, findParameter } from "./
 
 const STATE_KEY = "design-sense-doc-workspace-v1";
 const STYLES_KEY = "design-sense-my-styles-v1";
+const STYLES_APP_ID = "design-sense-my-styles";
+const COLOR_PARAMETER_IDS = ["pageColor", "textColor", "mutedColor", "accentColor"];
 
 function normalizeValue(parameter, value) {
   if (parameter.type === "number") {
@@ -59,6 +61,7 @@ function hydrateStyle(style, index) {
     schemaVersion: 1,
     id: Number.isFinite(Number(style.id)) ? Number(style.id) : Date.now() + index,
     name: typeof style.name === "string" ? style.name.slice(0, 60) : `${config.label}样式`,
+    note: typeof style.note === "string" ? style.note.slice(0, 240) : "",
     type: style.type,
     values,
     date: typeof style.date === "string" ? style.date.slice(0, 20) : "",
@@ -115,16 +118,19 @@ export function resetCurrentDocument(state) {
   state.documents[state.currentType] = defaultsFor(DOCUMENT_TYPES[state.currentType]);
 }
 
-export function saveCurrentStyle(state, name) {
+export function saveCurrentStyle(state, name, note = "") {
   const config = DOCUMENT_TYPES[state.currentType];
-  const style = {
+  const maxExistingId = state.styles.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0);
+  const nextId = Math.max(Date.now(), maxExistingId + 1);
+  const style = hydrateStyle({
     schemaVersion: 1,
-    id: Date.now(),
-    name: String(name).trim().slice(0, 60) || `${config.label}样式`,
+    id: nextId,
+    name: String(name || "").trim().slice(0, 60) || `${config.label}样式`,
+    note: String(note || "").trim().slice(0, 240),
     type: state.currentType,
     values: { ...state.documents[state.currentType].values },
     date: new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()),
-  };
+  }, 0);
   state.styles.unshift(style);
   if (!persistStyles(state)) {
     state.styles.shift();
@@ -145,4 +151,94 @@ export function applyStyle(state, styleId) {
   });
   persistWorkspace(state);
   return true;
+}
+
+export function applyStyleColors(state, styleId) {
+  const style = state.styles.find((item) => String(item.id) === String(styleId));
+  if (!style || !style.values) return false;
+  return applyColorsToCurrentDocument(state, style.values);
+}
+
+export function applyColorsToCurrentDocument(state, colors) {
+  if (!colors || typeof colors !== "object") return false;
+  const config = DOCUMENT_TYPES[state.currentType];
+  let updated = false;
+  COLOR_PARAMETER_IDS.forEach((parameterId) => {
+    const parameter = findParameter(config, parameterId);
+    if (parameter && Object.hasOwn(colors, parameterId)) {
+      state.documents[state.currentType].values[parameterId] = normalizeValue(parameter, colors[parameterId]);
+      updated = true;
+    }
+  });
+  if (updated) persistWorkspace(state);
+  return updated;
+}
+
+export function deleteStyle(state, styleId) {
+  const index = state.styles.findIndex((item) => String(item.id) === String(styleId));
+  if (index === -1) return false;
+  const [removed] = state.styles.splice(index, 1);
+  if (!persistStyles(state)) {
+    state.styles.splice(index, 0, removed);
+    return false;
+  }
+  return true;
+}
+
+function styleSignature(style) {
+  return JSON.stringify([style.name, style.note || "", style.type, style.values]);
+}
+
+export function exportStylesBackup(state) {
+  return JSON.stringify({
+    app: STYLES_APP_ID,
+    schemaVersion: 1,
+    exportedAt: new Date().toISOString(),
+    styles: state.styles,
+  }, null, 2);
+}
+
+export function importStylesBackup(state, text) {
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("文件不是有效的 JSON，请选择文档模版备份。");
+  }
+  const rawList = Array.isArray(data) ? data : (data?.app === STYLES_APP_ID && data.schemaVersion === 1 && Array.isArray(data.styles) ? data.styles : null);
+  if (!rawList) {
+    throw new Error("备份格式或版本不匹配，请选择本应用导出的文档模版 JSON 文件。");
+  }
+  const incoming = rawList.map((item, idx) => hydrateStyle(item, idx));
+  if (incoming.some((item) => !item)) {
+    throw new Error("备份中的模版记录格式不完整，请选择本应用导出的 JSON 文件。");
+  }
+  const previous = [...state.styles];
+  const merged = [...state.styles];
+  const signatures = new Set(merged.map(styleSignature));
+  const ids = new Set(merged.map((item) => String(item.id)));
+  let added = 0;
+  let skipped = 0;
+  let conflicts = 0;
+  incoming.forEach((style, idx) => {
+    const sig = styleSignature(style);
+    if (signatures.has(sig)) {
+      skipped++;
+      return;
+    }
+    if (ids.has(String(style.id))) {
+      style.id = Date.now() + idx + Math.floor(Math.random() * 10000);
+      conflicts++;
+    }
+    ids.add(String(style.id));
+    signatures.add(sig);
+    merged.push(style);
+    added++;
+  });
+  state.styles = merged;
+  if (!persistStyles(state)) {
+    state.styles = previous;
+    throw new Error("导入失败，浏览器存储可能不可用或已满。");
+  }
+  return { added, skipped, conflicts };
 }

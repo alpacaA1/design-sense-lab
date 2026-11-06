@@ -7,6 +7,7 @@
     <title>Design Sense Lab · 设计训练工作台</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="prompt-notes.css" />
+    <link rel="stylesheet" href="color-palettes.css" />
   </head>
   <body>
     <a class="skip-link" id="skip-link" href="#document-canvas">跳到文档画布</a>
@@ -21,6 +22,7 @@
       <nav class="studio-switcher" aria-label="工作台模式">
         <button class="studio-switch is-active" type="button" data-studio-mode="documents" aria-current="page">文档排版</button>
         <button class="studio-switch" type="button" data-studio-mode="components" aria-current="false">组件训练</button>
+        <button class="studio-switch" type="button" data-studio-mode="colors" aria-current="false">配色积累</button>
         <button class="studio-switch" type="button" data-studio-mode="prompts" aria-current="false">提示词笔记</button>
       </nav>
       <button class="library-trigger" id="library-trigger" type="button">
@@ -68,25 +70,33 @@
 
       <section class="styles-view" id="styles-view" hidden>
         <header class="styles-header">
-          <div><p class="panel-kicker">My Styles</p><h1>我的文档样式</h1><p>保存有效参数组合，在下一份文档中继续使用和修正。</p></div>
-          <button class="secondary-button" id="back-to-workspace" type="button">返回工作台</button>
+          <div><p class="panel-kicker">My Styles &amp; Templates</p><h1>我的文档样式与模版</h1><p>保存整套排版参数与配色组合，在下一份文档中继续复用、导出备份或提取配色。</p></div>
+          <div class="styles-header-actions">
+            <button class="secondary-button" id="import-styles-button" type="button">导入模版</button>
+            <button class="secondary-button" id="export-styles-button" type="button">导出备份</button>
+            <button class="secondary-button" id="back-to-workspace" type="button">返回工作台</button>
+          </div>
         </header>
         <div class="style-filters" id="style-filters" role="group" aria-label="按文档类型筛选"></div>
         <div class="styles-grid" id="styles-grid"></div>
+        <input id="styles-import-input" type="file" accept=".json,application/json" hidden />
       </section>
 
       <section class="component-lab-view" id="component-lab" aria-label="组件像素训练场" hidden></section>
+      <section class="color-palettes-view" id="color-palettes" aria-label="配色积累" tabindex="-1" hidden></section>
       <section class="prompt-notes-view" id="prompt-notes" aria-label="提示词笔记" tabindex="-1" hidden></section>
     </main>
 
     <dialog class="save-dialog" id="save-style-dialog">
       <form method="dialog" id="save-style-form">
-        <div class="dialog-heading"><p class="panel-kicker">Save style</p><h2>保存当前文档样式</h2><p>保存后可以从 My Styles 恢复这组参数。</p></div>
-        <label for="style-name">样式名称</label>
+        <div class="dialog-heading"><p class="panel-kicker">Save template</p><h2>保存当前文档排版模版</h2><p>保存整套页面、字号、间距与配色参数，可随时从 My Styles 恢复或导出。</p></div>
+        <label for="style-name">模版名称</label>
         <input id="style-name" name="styleName" maxlength="60" autocomplete="off" />
+        <label for="style-note">适用说明 / 备注（选填）</label>
+        <textarea id="style-note" name="styleNote" rows="3" maxlength="240" placeholder="例如：适合双栏深度报告，正文 16px 暖纸油墨蓝"></textarea>
         <div class="dialog-actions">
           <button class="secondary-button" value="cancel" type="button" id="cancel-save">取消</button>
-          <button class="primary-button compact" value="confirm" type="submit">保存样式</button>
+          <button class="primary-button compact" value="confirm" type="submit">保存模版</button>
         </div>
       </form>
     </dialog>

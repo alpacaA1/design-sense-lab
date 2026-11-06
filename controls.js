@@ -85,12 +85,20 @@ export function renderControls(container, config, documentState, callbacks) {
                 <div class="parameter-copy"><strong>${parameter.label}</strong><small>${parameter.description}</small></div>
                 <div class="parameter-control">${renderInput(parameter, documentState.values[parameter.id])}</div>
               </section>`).join("")}
+            ${categoryId === "color" ? `
+              <div class="parameter-panel-footer">
+                <button class="secondary-button panel-action-button" type="button" data-save-doc-palette>将当前四色存入配色积累</button>
+              </div>` : ""}
           </div>` : ""}
       </section>`;
   }).join("");
 
   container.querySelectorAll("[data-category]").forEach((button) => {
     button.addEventListener("click", () => callbacks.onCategory(button.dataset.category));
+  });
+
+  container.querySelector("[data-save-doc-palette]")?.addEventListener("click", () => {
+    callbacks.onSavePalette?.();
   });
 
   container.querySelectorAll("[data-param]").forEach((control) => {

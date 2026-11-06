@@ -8,8 +8,13 @@ globalThis.localStorage = {
 
 const { CATEGORY_ORDER, DOCUMENT_TYPES, allParameters } = await import("../config.js");
 const {
+  applyColorsToCurrentDocument,
   applyStyle,
+  applyStyleColors,
   createAppState,
+  deleteStyle,
+  exportStylesBackup,
+  importStylesBackup,
   persistWorkspace,
   resetCurrentDocument,
   saveCurrentStyle,
@@ -55,17 +60,39 @@ assert.equal(persistWorkspace(restored), true);
 const restoredCollapsed = createAppState();
 assert.equal(restoredCollapsed.documents.resume.activeCategory, null, "collapsed category state should survive reload");
 
-const saved = saveCurrentStyle(state, "克制双栏简历");
+const saved = saveCurrentStyle(state, "克制双栏简历", "适合产品与设计岗位");
 assert.ok(saved);
+assert.equal(saved.note, "适合产品与设计岗位");
 setParameter(state, "bodySize", 13);
 assert.equal(applyStyle(state, saved.id), true);
 assert.equal(state.documents.resume.values.bodySize, 17);
+
+assert.equal(applyColorsToCurrentDocument(state, {
+  pageColor: "#F6F5F0",
+  textColor: "#1E2220",
+  mutedColor: "#636B66",
+  accentColor: "#9A4B26",
+}), true);
+assert.equal(state.documents.resume.values.accentColor, "#9A4B26");
+
+const coloredStyle = saveCurrentStyle(state, "赭石简历模版");
+setDocumentType(state, "longdoc");
+assert.equal(applyStyleColors(state, coloredStyle.id), true);
+assert.equal(state.documents.longdoc.values.accentColor, "#9A4B26", "template colors can apply across document types");
+
+const backup = exportStylesBackup(state);
+assert.deepEqual(importStylesBackup(state, backup), { added: 0, skipped: 2, conflicts: 0 });
+assert.equal(deleteStyle(state, coloredStyle.id), true);
+assert.equal(state.styles.length, 1);
+assert.deepEqual(importStylesBackup(state, backup), { added: 1, skipped: 1, conflicts: 0 });
+assert.equal(state.styles.length, 2);
 
 const metrics = calculateMetrics("resume", state.documents.resume.values);
 assert.ok(metrics.pages >= 1);
 assert.ok(metrics.charsPerLine >= 10);
 assert.ok(["紧凑", "舒适", "宽松"].includes(metrics.density));
 
+setDocumentType(state, "resume");
 resetCurrentDocument(state);
 assert.equal(state.documents.resume.values.bodySize, 13);
 assert.equal(state.documents.resume.activeCategory, "page");
