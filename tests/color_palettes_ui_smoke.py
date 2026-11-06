@@ -74,6 +74,24 @@ with sync_playwright() as playwright:
     expect(page.locator('[data-color-hex="accentColor"]')).to_have_value("#9A4B26")
     page.get_by_role("button", name="取消", exact=True).click()
 
+    # Test Screenshot Inspector in Component Lab
+    page.get_by_role("button", name="组件训练", exact=True).click()
+    expect(page.locator("#component-lab")).to_be_visible()
+    page.locator("[data-open-inspector]").click()
+    expect(page.locator("#inspector-title")).to_be_visible()
+    expect(page.locator("[data-inspected-size]")).to_have_text("140 × 44px")
+    expect(page.locator("[data-inspected-radius]")).to_contain_text("8px")
+    expect(page.locator("[data-inspected-padding]")).to_contain_text("左右 18px")
+    page.screenshot(path=str(ARTIFACTS / "screenshot-inspector-desktop.png"))
+
+    # Apply inspected component to sandbox
+    page.locator("[data-apply-inspector-sandbox]").click()
+    expect(page.locator('input[type="number"][data-training-param="height"]')).to_have_value("44")
+    expect(page.locator('input[type="number"][data-training-param="paddingX"]')).to_have_value("18")
+
+    # Return to Color Palettes
+    page.get_by_role("button", name="配色积累", exact=True).click()
+
     # Export and re-import palettes backup
     with page.expect_download() as palette_dl_info:
         page.get_by_role("button", name="导出备份", exact=True).click()

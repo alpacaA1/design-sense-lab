@@ -9,7 +9,11 @@ import {
   importColorPalettes,
   normalizeHex,
   saveColorPalette,
-} from "./color-palettes-store.js?v=20261106";
+} from "./color-palettes-store.js?v=20261106b";
+import {
+  extractPaletteFromImageData,
+  samplePixelHex,
+} from "./screenshot-analyzer.js?v=20261106b";
 
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -18,6 +22,7 @@ const icons = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
   edit: '<path d="m15 4 5 5M4 20l1-6L16 3l5 5L10 19Z"/>',
   apply: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 15-5-5L5 20"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 const escapeHtml = (text) => String(text ?? "")
@@ -98,6 +103,33 @@ function renderContrastPanel(colors) {
     </div>`;
 }
 
+function loadFileToImageData(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 960;
+      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const width = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+      const height = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/png");
+      URL.revokeObjectURL(url);
+      resolve({ imageData, dataUrl, width, height, fileName: file.name || "截图" });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("截图读取失败，请上传 PNG、JPG 或 WebP 图片。"));
+    };
+    img.src = url;
+  });
+}
+
 export function initColorPalettes(root, { showToast, getCurrentDocumentColors, onApplyToDocument }) {
   const state = createColorPalettesState();
   let selectedId = null;
@@ -106,6 +138,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
   let query = "";
   let activeTag = "";
   let draftFields = null;
+  let screenshotContext = null; // { imageData, dataUrl, swatches, activeRole }
 
   function current() {
     return state.palettes.find((item) => item.id === selectedId);
@@ -123,6 +156,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       editing = false;
       dirty = false;
       draftFields = null;
+      screenshotContext = null;
       render();
     }
     return true;
@@ -137,6 +171,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
     selectedId = null;
     editing = true;
     dirty = false;
+    screenshotContext = meta.screenshotContext || null;
     draftFields = {
       title: meta.title || "",
       notes: meta.notes || "",
@@ -152,6 +187,52 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
     resetScroll();
     root.querySelector("#palette-title")?.focus({ preventScroll: true });
     return true;
+  }
+
+  async function processScreenshotFile(file) {
+    try {
+      const loaded = await loadFileToImageData(file);
+      const extracted = extractPaletteFromImageData(loaded.imageData, 8);
+      const cleanName = loaded.fileName.replace(/\.[a-z0-9]+$/i, "");
+      screenshotContext = {
+        imageData: loaded.imageData,
+        dataUrl: loaded.dataUrl,
+        swatches: extracted.swatches,
+        activeRole: "accentColor",
+      };
+      if (!editing) {
+        selectedId = null;
+        editing = true;
+        dirty = true;
+        draftFields = {
+          title: cleanName && cleanName !== "image" ? `${cleanName} · 截图配色` : "软件截图提取配色",
+          notes: `从截图自动提取的四角色配色（主色块占比：${extracted.swatches.slice(0, 4).map((s) => `${s.hex} ${s.share}%`).join("、")}）。`,
+          tags: ["截图提取"],
+          colors: extracted.roles,
+        };
+        render();
+        resetScroll();
+      } else {
+        // Update current editor form inputs
+        const form = root.querySelector("#color-palette-form");
+        if (form) {
+          const currentTitle = form.querySelector("#palette-title")?.value || "";
+          const currentNotes = form.querySelector("#palette-notes")?.value || "";
+          const currentTags = form.querySelector("#palette-tags")?.value || "";
+          draftFields = {
+            title: currentTitle || (cleanName && cleanName !== "image" ? `${cleanName} · 截图配色` : "软件截图提取配色"),
+            notes: currentNotes || `从截图自动提取的四角色配色（主色块占比：${extracted.swatches.slice(0, 4).map((s) => `${s.hex} ${s.share}%`).join("、")}）。`,
+            tags: currentTags ? currentTags.split(/[,，、]+/).map((s) => s.trim()).filter(Boolean) : ["截图提取"],
+            colors: extracted.roles,
+          };
+          dirty = true;
+          render();
+        }
+      }
+      showToast("已从截图自动识别四角色配色，可点击画面或色块微调");
+    } catch (error) {
+      showToast(error.message);
+    }
   }
 
   function tagButtons(tags, filter = false) {
@@ -223,9 +304,10 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
         <header class="palette-page-heading">
           <div>
             <h1 tabindex="-1">配色积累</h1>
-            <p>记录纸张底色、主次文字与强调色的搭配尝试，记下心得并一键应用到文档工作台。</p>
+            <p>记录纸张底色、主次文字与强调色的搭配尝试，支持上传或粘贴软件截图自动提取配色。</p>
           </div>
           <div class="palette-actions">
+            <button class="secondary-button" type="button" data-palette-action="upload-screenshot">${icon("image")}从截图识别配色</button>
             <button class="secondary-button" type="button" data-palette-action="import">导入</button>
             <button class="secondary-button" type="button" data-palette-action="export">导出备份</button>
             <button class="primary-button" type="button" data-palette-action="new">${icon("plus")}新建配色</button>
@@ -246,8 +328,9 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
             ${tagButtons(tags, true)}
           </div>` : ""}
         <div id="color-palette-results" class="palette-results"></div>
-        <footer class="palette-local-note">配色记录保存在此浏览器。导出 JSON 备份后，可以在另一台设备合并导入。</footer>
+        <footer class="palette-local-note">配色记录保存在此浏览器。也可直接按 Ctrl/Cmd + V 粘贴软件截图自动识别配色。</footer>
         <input id="color-palette-import" type="file" accept=".json,application/json" hidden />
+        <input id="color-palette-screenshot" type="file" accept="image/*" hidden />
       </div>`;
     renderResults();
     root.querySelector("#color-palette-search").addEventListener("input", (event) => {
@@ -267,6 +350,15 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
         showToast(`已导入 ${result.added} 组，跳过 ${result.skipped} 组重复记录${result.conflicts ? `；${result.conflicts} 组冲突内容已另存` : ""}`);
       } catch (error) {
         showToast(error.message);
+      } finally {
+        event.target.value = "";
+      }
+    });
+    root.querySelector("#color-palette-screenshot").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        await processScreenshotFile(file);
       } finally {
         event.target.value = "";
       }
@@ -327,8 +419,44 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       </article>`;
   }
 
+  function renderScreenshotExtractorBox() {
+    if (!screenshotContext) return "";
+    const activeRole = screenshotContext.activeRole || "accentColor";
+    return `
+      <section class="palette-screenshot-box" aria-label="截图取色与候选色板">
+        <header class="palette-screenshot-box__head">
+          <div>
+            <strong>截图色彩拆解与吸管</strong>
+            <span>点击下方截图任意位置或右侧候选色块，可将颜色赋给所选角色。</span>
+          </div>
+          <div class="palette-role-target-tabs" role="group" aria-label="吸管赋值目标角色">
+            ${COLOR_ROLES.map((role) => `
+              <button type="button" class="palette-target-chip ${activeRole === role.id ? "is-active" : ""}" data-pick-role="${role.id}" aria-pressed="${activeRole === role.id}">
+                吸取到：${escapeHtml(role.label)}
+              </button>`).join("")}
+          </div>
+        </header>
+        <div class="palette-screenshot-box__body">
+          <div class="palette-screenshot-stage">
+            <img id="palette-screenshot-img" src="${screenshotContext.dataUrl}" alt="待取色的软件截图" />
+          </div>
+          <div class="palette-extracted-swatches">
+            <span>识别出的主色块（点击赋给当前选中角色）</span>
+            <div class="palette-swatch-grid">
+              ${screenshotContext.swatches.map((s) => `
+                <button type="button" class="palette-extracted-chip" data-Assign-swatch="${escapeHtml(s.hex)}">
+                  <i style="background:${escapeHtml(s.hex)}"></i>
+                  <code>${escapeHtml(s.hex)}</code>
+                  <small>${s.share}%</small>
+                </button>`).join("")}
+            </div>
+          </div>
+        </div>
+      </section>`;
+  }
+
   function renderEditor(palette) {
-    const initial = palette || draftFields || {
+    const initial = draftFields || palette || {
       title: "",
       notes: "",
       tags: [],
@@ -342,12 +470,14 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
         <header class="palette-page-heading">
           <div>
             <h1 tabindex="-1">${palette ? "编辑配色" : "新建配色"}</h1>
-            <p>调整四个语义角色颜色，右侧实时检视样张效果与对比度。</p>
+            <p>调整四个语义角色颜色，或上传/粘贴软件截图自动识别配色。</p>
           </div>
           <div class="palette-actions">
+            <button class="secondary-button" type="button" data-palette-action="upload-screenshot">${icon("image")}从截图识别配色</button>
             <button class="secondary-button" type="button" data-palette-action="fill-from-doc">填入当前文档配色</button>
           </div>
         </header>
+        ${renderScreenshotExtractorBox()}
         <div class="palette-editor-layout">
           <form id="color-palette-form" class="palette-form">
             <label for="palette-title">配色名称 <span>必填</span></label>
@@ -395,10 +525,25 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
             <div id="palette-editor-contrast">${renderContrastPanel(colors)}</div>
           </aside>
         </div>
+        <input id="color-palette-screenshot" type="file" accept="image/*" hidden />
       </div>`;
 
     const form = root.querySelector("#color-palette-form");
     const titleInput = root.querySelector("#palette-title");
+
+    function setRoleHex(roleId, rawHex) {
+      const hex = normalizeHex(rawHex);
+      if (!hex || !form) return;
+      const textInput = form.querySelector(`[data-color-hex="${roleId}"]`);
+      const picker = form.querySelector(`[data-color-picker="${roleId}"]`);
+      if (textInput) textInput.value = hex;
+      if (picker) {
+        picker.value = hex.toLowerCase();
+        picker.closest(".color-swatch")?.style.setProperty("--swatch", hex);
+      }
+      dirty = true;
+      refreshLivePreview();
+    }
 
     function currentEditorColors() {
       const next = {};
@@ -417,16 +562,54 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       root.querySelector("#palette-editor-contrast").innerHTML = renderContrastPanel(liveColors);
     }
 
+    root.querySelector("#color-palette-screenshot")?.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        await processScreenshotFile(file);
+      } finally {
+        event.target.value = "";
+      }
+    });
+
+    const screenshotImg = root.querySelector("#palette-screenshot-img");
+    screenshotImg?.addEventListener("click", (event) => {
+      if (!screenshotContext?.imageData) return;
+      const rect = screenshotImg.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * screenshotContext.imageData.width;
+      const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * screenshotContext.imageData.height;
+      const pickedHex = samplePixelHex(screenshotContext.imageData, x, y);
+      const roleId = screenshotContext.activeRole || "accentColor";
+      const roleLabel = COLOR_ROLES.find((r) => r.id === roleId)?.label || roleId;
+      setRoleHex(roleId, pickedHex);
+      showToast(`已吸取 ${pickedHex} 到「${roleLabel}」`);
+    });
+
+    root.querySelectorAll("[data-pick-role]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!screenshotContext) return;
+        screenshotContext.activeRole = btn.dataset.pickRole;
+        root.querySelectorAll("[data-pick-role]").forEach((item) => {
+          const active = item === btn;
+          item.classList.toggle("is-active", active);
+          item.setAttribute("aria-pressed", String(active));
+        });
+      });
+    });
+
+    root.querySelectorAll("[data-assign-swatch]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const hex = btn.dataset.assignSwatch;
+        const roleId = screenshotContext?.activeRole || "accentColor";
+        const roleLabel = COLOR_ROLES.find((r) => r.id === roleId)?.label || roleId;
+        setRoleHex(roleId, hex);
+        showToast(`已将 ${hex} 设为「${roleLabel}」`);
+      });
+    });
+
     form.querySelectorAll("[data-color-picker]").forEach((picker) => {
       picker.addEventListener("input", () => {
-        dirty = true;
-        const roleId = picker.dataset.colorPicker;
-        const hex = normalizeHex(picker.value);
-        if (!hex) return;
-        const textInput = form.querySelector(`[data-color-hex="${roleId}"]`);
-        if (textInput) textInput.value = hex;
-        picker.closest(".color-swatch")?.style.setProperty("--swatch", hex);
-        refreshLivePreview();
+        setRoleHex(picker.dataset.colorPicker, picker.value);
       });
     });
 
@@ -463,6 +646,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
         dirty = false;
         editing = false;
         draftFields = null;
+        screenshotContext = null;
         render();
         resetScroll();
         focusHeading();
@@ -549,12 +733,15 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       if (action === "new") {
         selectedId = null;
         draftFields = null;
+        screenshotContext = null;
       }
       editing = true;
       dirty = false;
       render();
       resetScroll();
       root.querySelector("#palette-title")?.focus({ preventScroll: true });
+    } else if (action === "upload-screenshot") {
+      root.querySelector("#color-palette-screenshot")?.click();
     } else if (action === "fill-from-doc") {
       const docColors = defaultDraftColors(getCurrentDocumentColors);
       const form = root.querySelector("#color-palette-form");
@@ -592,6 +779,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       if (!canLeave()) return;
       if (action === "back" || !current()) selectedId = null;
       draftFields = null;
+      screenshotContext = null;
       render();
       resetScroll();
       focusHeading();
@@ -617,6 +805,18 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
     }
   });
 
+  window.addEventListener("paste", async (event) => {
+    if (root.hidden) return;
+    const items = [...(event.clipboardData?.items || [])];
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (file) {
+      event.preventDefault();
+      await processScreenshotFile(file);
+    }
+  });
+
   window.addEventListener("beforeunload", (event) => {
     if (!dirty) return;
     event.preventDefault();
@@ -624,5 +824,5 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
   });
 
   render();
-  return { canLeave, openDraftWithColors };
+  return { canLeave, openDraftWithColors, processScreenshotFile };
 }

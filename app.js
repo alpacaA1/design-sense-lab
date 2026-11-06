@@ -1,6 +1,6 @@
-import { DOCUMENT_TYPES } from "./config.js?v=20261106";
-import { renderControls } from "./controls.js?v=20261106";
-import { renderDocument } from "./renderers.js?v=20261106";
+import { DOCUMENT_TYPES } from "./config.js?v=20261106b";
+import { renderControls } from "./controls.js?v=20261106b";
+import { renderDocument } from "./renderers.js?v=20261106b";
 import {
   applyColorsToCurrentDocument,
   applyStyle,
@@ -15,9 +15,9 @@ import {
   setCategory,
   setDocumentType,
   setParameter,
-} from "./state.js?v=20261106";
-import { renderStyleFilters, renderStyles } from "./styles-library.js?v=20261106";
-import { initComponentLab } from "./component-lab.js?v=20261106";
+} from "./state.js?v=20261106b";
+import { renderStyleFilters, renderStyles } from "./styles-library.js?v=20261106b";
+import { initComponentLab } from "./component-lab.js?v=20261106b";
 
 const state = createAppState();
 
@@ -244,7 +244,7 @@ async function showColorPalettes(draftColors = null, draftMeta = null) {
   elements.colorPalettes.hidden = false;
   if (!colorPalettesLoading) {
     elements.colorPalettes.textContent = "正在打开配色积累…";
-    colorPalettesLoading = import("./color-palettes.js?v=20261106").then(({ initColorPalettes }) => {
+    colorPalettesLoading = import("./color-palettes.js?v=20261106b").then(({ initColorPalettes }) => {
       colorPalettes = initColorPalettes(elements.colorPalettes, {
         showToast,
         getCurrentDocumentColors,
@@ -277,7 +277,7 @@ async function showPromptNotes() {
   elements.promptNotes.hidden = false;
   if (!promptNotesLoading) {
     elements.promptNotes.textContent = "正在打开提示词笔记…";
-    promptNotesLoading = import("./prompt-notes.js?v=20261106").then(({ initPromptNotes }) => {
+    promptNotesLoading = import("./prompt-notes.js?v=20261106b").then(({ initPromptNotes }) => {
       promptNotes = initPromptNotes(elements.promptNotes, { showToast });
     }).catch(() => {
       elements.promptNotes.textContent = "笔记模块加载失败，请刷新后重试。";
@@ -434,7 +434,12 @@ elements.studioSwitches.forEach((button) => {
   });
 });
 
-componentLab = initComponentLab(elements.componentLab, { showToast });
+componentLab = initComponentLab(elements.componentLab, {
+  showToast,
+  async onSavePalette(colors, meta) {
+    await showColorPalettes(colors, meta);
+  },
+});
 renderWorkspace();
 if (location.hash === "#prompts") showPromptNotes();
 else if (location.hash === "#colors") showColorPalettes();

@@ -1,3 +1,8 @@
+import {
+  extractPaletteFromImageData,
+  inspectComponentRegion,
+} from "./screenshot-analyzer.js?v=20261106b";
+
 const SESSION_KEY = "design-sense-component-sessions-v1";
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2;
@@ -475,7 +480,67 @@ function measurementMarkup(type, values) {
   </div>`;
 }
 
-export function initComponentLab(root, { showToast } = {}) {
+function createDemoScreenshot() {
+  const width = 760;
+  const height = 420;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+
+  const roundRect = (x, y, w, h, r, fill, stroke = null, lineW = 2) => {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    if (fill) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (stroke) {
+      ctx.lineWidth = lineW;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+    }
+  };
+
+  // @2x Retina surface (#FAF9F5)
+  ctx.fillStyle = "#FAF9F5";
+  ctx.fillRect(0, 0, width, height);
+
+  // Header text blocks (#262522 and #716D66)
+  roundRect(56, 44, 240, 32, 4, "#262522");
+  roundRect(56, 90, 360, 20, 4, "#716D66");
+
+  // 1. Primary Button (@2x: 280x88 -> CSS 140x44, radius 16 -> CSS 8px, paddingX 36 -> CSS 18px)
+  roundRect(56, 148, 280, 88, 16, "#315F9E");
+  roundRect(56 + 36, 148 + 30, 280 - 72, 28, 3, "#FFFEFB");
+
+  // 2. Input Box (@2x: 360x80 -> CSS 180x40, radius 12 -> CSS 6px, border 2 -> CSS 1px)
+  roundRect(368, 152, 336, 80, 12, "#FFFEFB", "#716D66", 2);
+  roundRect(368 + 24, 152 + 26, 180, 28, 3, "#262522");
+
+  // 3. Card container (@2x: 648x124 -> CSS 324x62, radius 20 -> CSS 10px)
+  roundRect(56, 264, 648, 116, 20, "#EFEDE5", "#716D66", 2);
+  roundRect(56 + 40, 264 + 32, 220, 24, 3, "#262522");
+  roundRect(56 + 40, 264 + 68, 420, 20, 3, "#716D66");
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const dataUrl = canvas.toDataURL("image/png");
+  const palette = extractPaletteFromImageData(imageData, 8);
+  const defaultSelection = { x: 42, y: 134, width: 308, height: 116 };
+  const inspection = inspectComponentRegion(imageData, defaultSelection, { scale: 2 });
+
+  return {
+    fileName: "示例软件界面截图 (@2x)",
+    imageData,
+    dataUrl,
+    scale: 2,
+    palette,
+    selection: defaultSelection,
+    inspection,
+  };
+}
+
+export function initComponentLab(root, { showToast, onSavePalette } = {}) {
   const questions = Object.fromEntries(Object.keys(COMPONENT_TYPES).map((type) => [type, createQuestion(type)]));
   const state = {
     type: "button",
@@ -492,6 +557,7 @@ export function initComponentLab(root, { showToast } = {}) {
     questions,
     values: Object.fromEntries(Object.entries(COMPONENT_TYPES).map(([id, currentConfig]) => [id, initialTrainingValues(currentConfig, questions[id])])),
     sessions: readSessions(),
+    inspector: null,
   };
 
   function config() {
@@ -600,6 +666,81 @@ export function initComponentLab(root, { showToast } = {}) {
     </div>`;
   }
 
+  function inspectorMarkup() {
+    if (!state.inspector) state.inspector = createDemoScreenshot();
+    const insp = state.inspector;
+    const { imageData, dataUrl, scale, palette, selection, inspection, fileName } = insp;
+    const snapped = inspection?.snappedBox || selection;
+    const css = inspection?.css || { width: 0, height: 0, radius: 0, border: 0, paddingX: 0, paddingY: 0, fontSize: 14 };
+    const suggestedLabel = COMPONENT_TYPES[inspection?.suggestedType || "button"]?.zh || "按钮";
+    const leftPct = (snapped.x / imageData.width) * 100;
+    const topPct = (snapped.y / imageData.height) * 100;
+    const widthPct = (snapped.width / imageData.width) * 100;
+    const heightPct = (snapped.height / imageData.height) * 100;
+
+    return `<section class="trend-view inspector-view" tabindex="-1" aria-labelledby="inspector-title">
+      <header>
+        <div>
+          <span>截图几何与配色拆解 · ${fileName}</span>
+          <h2 id="inspector-title">从软件截图识别配色、组件宽高与圆角</h2>
+          <p>在下方截图上按住鼠标框选任意按钮、输入框或卡片（也可直接按 Ctrl/Cmd + V 粘贴新截图），自动边缘吸附并推算 CSS 尺寸、圆角和内边距。</p>
+        </div>
+        <div class="inspector-header-actions">
+          <button class="secondary-button" type="button" data-trigger-inspector-upload>上传截图</button>
+          <button class="secondary-button" type="button" data-close-inspector>返回训练</button>
+        </div>
+      </header>
+      <div class="inspector-toolbar">
+        <div class="inspector-scale-switch" role="group" aria-label="截图像素倍率">
+          <span>截图倍率</span>
+          ${[1, 2, 3].map((dpr) => `<button type="button" class="${scale === dpr ? "is-active" : ""}" data-inspector-scale="${dpr}" aria-pressed="${scale === dpr}">@${dpr}x${dpr === 2 ? " (Retina)" : ""}</button>`).join("")}
+        </div>
+        <span class="inspector-hint">提示：直接拖动鼠标框选目标组件周围，蓝框会自动贴合组件四边。</span>
+      </div>
+      <div class="inspector-grid">
+        <div class="inspector-stage-card">
+          <div class="inspector-canvas-wrap" id="inspector-canvas-wrap">
+            <img id="inspector-screenshot-img" src="${dataUrl}" alt="待拆解的软件截图" draggable="false" />
+            <div class="inspector-snapped-box" id="inspector-snapped-box" style="left:${leftPct}%;top:${topPct}%;width:${widthPct}%;height:${heightPct}%">
+              <span class="inspector-box-badge">${css.width} × ${css.height}px · R${css.radius}</span>
+            </div>
+            <div class="inspector-drag-box" id="inspector-drag-box" hidden></div>
+          </div>
+        </div>
+        <aside class="inspector-results-card" aria-label="组件与配色识别结果">
+          <section class="inspector-result-block">
+            <h3>框选组件尺寸与圆角（@${scale}x 换算）</h3>
+            <dl class="inspector-metrics-grid">
+              <div><dt>CSS 宽 × 高</dt><dd><strong data-inspected-size>${css.width} × ${css.height}px</strong><small>物理像素 ${snapped.width} × ${snapped.height}px</small></dd></div>
+              <div><dt>组件圆角</dt><dd><strong data-inspected-radius>${css.radius}px${css.isPill ? " (胶囊)" : ""}</strong><small>四角曲率自动拟合</small></dd></div>
+              <div><dt>内边距估计</dt><dd><strong data-inspected-padding>左右 ${css.paddingX}px · 上下 ${css.paddingY}px</strong><small>基于内部文字/图标包围盒</small></dd></div>
+              <div><dt>边框与字号</dt><dd><strong data-inspected-font>边框 ${css.border}px · 字号约 ${css.fontSize}px</strong><small>推荐归类：${suggestedLabel}</small></dd></div>
+            </dl>
+            <div class="inspector-component-colors">
+              <span>组件局部色值</span>
+              <span class="inspector-color-pill"><i style="background:${inspection?.colors?.fillColor || "#315F9E"}"></i>底色 <code>${inspection?.colors?.fillColor || "#315F9E"}</code></span>
+              <span class="inspector-color-pill"><i style="background:${inspection?.colors?.contentColor || "#FFFEFB"}"></i>内容 <code>${inspection?.colors?.contentColor || "#FFFEFB"}</code></span>
+            </div>
+            <button class="primary-button compact inspector-full-btn" type="button" data-apply-inspector-sandbox>带入「${suggestedLabel}」探索沙盒 1:1 复刻</button>
+          </section>
+          <section class="inspector-result-block">
+            <h3>全图自动识别配色</h3>
+            <div class="inspector-palette-roles">
+              ${[
+                { label: "纸张/背景", hex: palette.roles.pageColor },
+                { label: "主要文字", hex: palette.roles.textColor },
+                { label: "次级文字", hex: palette.roles.mutedColor },
+                { label: "强调色", hex: palette.roles.accentColor },
+              ].map((item) => `<div class="inspector-role-item"><i style="background:${item.hex}"></i><span>${item.label}</span><code>${item.hex}</code></div>`).join("")}
+            </div>
+            <button class="secondary-button inspector-full-btn" type="button" data-save-inspector-palette>将此截图配色存入「配色积累」</button>
+          </section>
+        </aside>
+      </div>
+      <input id="inspector-file-input" type="file" accept="image/*" hidden />
+    </section>`;
+  }
+
   function render() {
     const currentConfig = config();
     const currentQuestion = question();
@@ -614,8 +755,22 @@ export function initComponentLab(root, { showToast } = {}) {
     if (state.view === "trends") {
       root.innerHTML = `<aside class="training-panel">
         <header class="training-heading"><p class="panel-kicker">Pixel training</p><h1>组件像素训练</h1><p>复盘保存的判断，找到反复出现的尺寸偏差。</p></header>
-        <div class="training-section"><button class="history-entry is-active" type="button" data-close-trends aria-current="page"><strong>偏差趋势</strong><span>${state.sessions.length} 条记录</span></button></div>
+        <div class="training-section">
+          <button class="history-entry is-active" type="button" data-close-trends aria-current="page"><strong>偏差趋势</strong><span>${state.sessions.length} 条记录</span></button>
+          <button class="history-entry" type="button" data-open-inspector><strong>截图拆解</strong><span>测配色与圆角尺寸</span></button>
+        </div>
       </aside><section class="training-workspace">${trendMarkup(state.sessions)}</section>`;
+      bind();
+      return;
+    }
+    if (state.view === "inspector") {
+      root.innerHTML = `<aside class="training-panel">
+        <header class="training-heading"><p class="panel-kicker">Screenshot Inspector</p><h1>截图像素拆解</h1><p>上传软件截图，自动提取四色并框选测量组件宽高、圆角与内边距。</p></header>
+        <div class="training-section">
+          <button class="history-entry" type="button" data-close-inspector><strong>返回组件训练</strong><span>猜尺寸 · 临摹 · 沙盒</span></button>
+          <button class="history-entry is-active" type="button" data-close-inspector aria-current="page"><strong>截图拆解</strong><span>已启用自动边缘吸附</span></button>
+        </div>
+      </aside><section class="training-workspace">${inspectorMarkup()}</section>`;
       bind();
       return;
     }
@@ -637,6 +792,7 @@ export function initComponentLab(root, { showToast } = {}) {
           ${questionMarkup(currentConfig, currentQuestion)}
           ${state.weakPractice ? `<div class="weak-practice-note"><span>专项复练中</span><button type="button" data-stop-weak-practice>退出专项</button></div>` : ""}
           <button class="history-entry" type="button" data-open-trends><strong>查看偏差趋势</strong><span>${state.sessions.length ? `${state.sessions.length} 条记录` : "保存结果后生成"}</span></button>
+          <button class="history-entry" type="button" data-open-inspector><strong>截图拆解（测尺寸/圆角）</strong><span>上传截图自动识别</span></button>
         </div>
         <div class="training-parameters ${controlsLocked ? "is-locked" : ""}">
           ${visibleParameters.map((parameter) => {
@@ -765,6 +921,131 @@ export function initComponentLab(root, { showToast } = {}) {
       state.view = "training";
       render();
     }));
+    root.querySelectorAll("[data-open-inspector]").forEach((button) => button.addEventListener("click", () => {
+      state.view = "inspector";
+      if (!state.inspector) state.inspector = createDemoScreenshot();
+      render();
+      window.requestAnimationFrame(() => root.querySelector(".inspector-view")?.focus({ preventScroll: true }));
+    }));
+    root.querySelectorAll("[data-close-inspector]").forEach((button) => button.addEventListener("click", () => {
+      state.view = "training";
+      render();
+    }));
+    root.querySelector("[data-trigger-inspector-upload]")?.addEventListener("click", () => {
+      root.querySelector("#inspector-file-input")?.click();
+    });
+    root.querySelector("#inspector-file-input")?.addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      if (file) loadInspectorFile(file);
+      event.target.value = "";
+    });
+    root.querySelectorAll("[data-inspector-scale]").forEach((button) => button.addEventListener("click", () => {
+      if (!state.inspector) return;
+      state.inspector.scale = Number(button.dataset.inspectorScale) || 2;
+      state.inspector.inspection = inspectComponentRegion(
+        state.inspector.imageData,
+        state.inspector.selection,
+        { scale: state.inspector.scale },
+      );
+      render();
+    }));
+    root.querySelector("[data-apply-inspector-sandbox]")?.addEventListener("click", () => {
+      const inspection = state.inspector?.inspection;
+      if (!inspection) return;
+      const targetType = inspection.suggestedType || "button";
+      state.type = targetType;
+      state.mode = "free";
+      state.view = "training";
+      state.revealed = false;
+      const targetConfig = COMPONENT_TYPES[targetType];
+      const nextValues = targetValues(targetConfig);
+      const mapField = (paramId, rawVal) => {
+        const param = targetConfig.parameters.find((p) => p.id === paramId);
+        if (param && Number.isFinite(rawVal)) {
+          nextValues[paramId] = clampParameterValue(param, rawVal);
+        }
+      };
+      mapField("height", inspection.css.height);
+      mapField("width", inspection.css.width);
+      mapField("paddingX", inspection.css.paddingX);
+      mapField("padding", Math.max(inspection.css.paddingX, inspection.css.paddingY));
+      mapField("radius", inspection.css.radius);
+      mapField("border", inspection.css.border);
+      mapField("fontSize", inspection.css.fontSize);
+      state.values[targetType] = nextValues;
+      render();
+      showToast?.(`已按识别尺寸复刻到「${targetConfig.zh}」探索沙盒`);
+    });
+    root.querySelector("[data-save-inspector-palette]")?.addEventListener("click", () => {
+      if (!state.inspector?.palette || !onSavePalette) return;
+      onSavePalette(state.inspector.palette.roles, {
+        title: `${state.inspector.fileName.replace(/\.[a-z0-9]+$/i, "")} · 配色`,
+        tags: ["截图拆解"],
+      });
+    });
+
+    const canvasWrap = root.querySelector("#inspector-canvas-wrap");
+    const dragBox = root.querySelector("#inspector-drag-box");
+    if (canvasWrap && dragBox && state.inspector) {
+      let dragStart = null;
+      const toImageCoords = (clientX, clientY) => {
+        const rect = canvasWrap.getBoundingClientRect();
+        const x = Math.max(0, Math.min(state.inspector.imageData.width, ((clientX - rect.left) / Math.max(1, rect.width)) * state.inspector.imageData.width));
+        const y = Math.max(0, Math.min(state.inspector.imageData.height, ((clientY - rect.top) / Math.max(1, rect.height)) * state.inspector.imageData.height));
+        return { x, y, rect };
+      };
+
+      canvasWrap.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        canvasWrap.setPointerCapture?.(event.pointerId);
+        dragStart = toImageCoords(event.clientX, event.clientY);
+        dragBox.hidden = false;
+        dragBox.style.left = `${(dragStart.x / state.inspector.imageData.width) * 100}%`;
+        dragBox.style.top = `${(dragStart.y / state.inspector.imageData.height) * 100}%`;
+        dragBox.style.width = "0%";
+        dragBox.style.height = "0%";
+      });
+
+      canvasWrap.addEventListener("pointermove", (event) => {
+        if (!dragStart) return;
+        const curr = toImageCoords(event.clientX, event.clientY);
+        const x0 = Math.min(dragStart.x, curr.x);
+        const y0 = Math.min(dragStart.y, curr.y);
+        const w = Math.abs(curr.x - dragStart.x);
+        const h = Math.abs(curr.y - dragStart.y);
+        dragBox.style.left = `${(x0 / state.inspector.imageData.width) * 100}%`;
+        dragBox.style.top = `${(y0 / state.inspector.imageData.height) * 100}%`;
+        dragBox.style.width = `${(w / state.inspector.imageData.width) * 100}%`;
+        dragBox.style.height = `${(h / state.inspector.imageData.height) * 100}%`;
+      });
+
+      const finishSelection = (event) => {
+        if (!dragStart) return;
+        const curr = toImageCoords(event.clientX, event.clientY);
+        dragBox.hidden = true;
+        let x0 = Math.min(dragStart.x, curr.x);
+        let y0 = Math.min(dragStart.y, curr.y);
+        let w = Math.abs(curr.x - dragStart.x);
+        let h = Math.abs(curr.y - dragStart.y);
+        dragStart = null;
+        if (w < 12 || h < 12) {
+          // Single click: expand search window around click point
+          w = Math.min(340, state.inspector.imageData.width * 0.45);
+          h = Math.min(120, state.inspector.imageData.height * 0.3);
+          x0 = Math.max(0, curr.x - w * 0.5);
+          y0 = Math.max(0, curr.y - h * 0.5);
+        }
+        state.inspector.selection = { x: x0, y: y0, width: w, height: h };
+        state.inspector.inspection = inspectComponentRegion(
+          state.inspector.imageData,
+          state.inspector.selection,
+          { scale: state.inspector.scale },
+        );
+        render();
+      };
+
+      canvasWrap.addEventListener("pointerup", finishSelection);
+    }
     root.querySelector("[data-start-weak-practice]")?.addEventListener("click", (event) => {
       const selected = analyzeSessions(state.sessions).find((item) => item.key === event.currentTarget.dataset.weakKey && item.count >= 2);
       if (!selected) return;
@@ -903,6 +1184,64 @@ export function initComponentLab(root, { showToast } = {}) {
       }
     });
   }
+
+  function loadInspectorFile(file) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const maxDim = 1040;
+      const ratio = Math.min(1, maxDim / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const width = Math.max(20, Math.round((img.naturalWidth || 1) * ratio));
+      const height = Math.max(20, Math.round((img.naturalHeight || 1) * ratio));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, width, height);
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/png");
+      URL.revokeObjectURL(url);
+
+      const palette = extractPaletteFromImageData(imageData, 8);
+      const scale = state.inspector?.scale || 2;
+      const selection = {
+        x: Math.round(width * 0.1),
+        y: Math.round(height * 0.12),
+        width: Math.round(width * 0.8),
+        height: Math.round(height * 0.76),
+      };
+      const inspection = inspectComponentRegion(imageData, selection, { scale });
+      state.inspector = {
+        fileName: file.name || "上传截图",
+        imageData,
+        dataUrl,
+        scale,
+        palette,
+        selection,
+        inspection,
+      };
+      state.view = "inspector";
+      render();
+      showToast?.("已识别截图配色与初始区域，可拖动鼠标框选具体组件");
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      showToast?.("截图加载失败，请选择有效的图片文件");
+    };
+    img.src = url;
+  }
+
+  window.addEventListener("paste", (event) => {
+    if (root.hidden) return;
+    const items = [...(event.clipboardData?.items || [])];
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (file) {
+      event.preventDefault();
+      loadInspectorFile(file);
+    }
+  });
 
   render();
   return { refresh: render, sessionCount: () => state.sessions.length };
