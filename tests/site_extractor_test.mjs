@@ -54,4 +54,14 @@ assert.equal(fromCss.typography.sectionTitleSize, 22);
 assert.equal(fromCss.typography.titleSize, 40);
 assert.equal(fromCss.components.button.radius, 8);
 
-console.log("site extractor tests passed: script generation, JSON report parsing, CSS snippet parsing, document mapping");
+// 5. Test direct shadcn URL detection and general URL guidance
+const shadcnReport = parseSiteStyleInput("https://ui.shadcn.com/");
+assert.equal(shadcnReport.site.hostname, "ui.shadcn.com");
+assert.equal(shadcnReport.components.button.radius, 10);
+assert.equal(shadcnReport.colors.accentColor, "#18181B");
+
+assert.throws(() => {
+  parseSiteStyleInput("https://example.com");
+}, /浏览器跨域安全限制/);
+
+console.log("site extractor tests passed: script generation, JSON report parsing, CSS snippet parsing, URL guidance, document mapping");

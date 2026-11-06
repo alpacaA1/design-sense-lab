@@ -138,6 +138,42 @@ export function getBookmarkletHref() {
   return `javascript:${encodeURIComponent(compact)}`;
 }
 
+export function createShadcnSiteReport() {
+  return {
+    app: SITE_EXTRACTOR_APP_ID,
+    schemaVersion: 1,
+    site: {
+      title: "shadcn/ui - The Foundation for your Design System",
+      url: "https://ui.shadcn.com/",
+      hostname: "ui.shadcn.com",
+      extractedAt: new Date().toISOString(),
+    },
+    colors: {
+      pageColor: "#FFFFFF",
+      textColor: "#09090B",
+      mutedColor: "#71717A",
+      accentColor: "#18181B",
+      swatches: ["#FFFFFF", "#09090B", "#71717A", "#18181B", "#F4F4F5", "#E4E4E7"],
+    },
+    typography: {
+      fontFamilyStack: 'Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      bodySize: 16,
+      lineHeight: 1.56,
+      bodyWeight: "400",
+      letterSpacing: 0,
+      titleSize: 48,
+      sectionTitleSize: 24,
+      titleWeight: "600",
+      paragraphGap: 16,
+    },
+    components: {
+      button: { height: 36, paddingX: 16, fontSize: 14, radius: 10 },
+      input: { height: 36, paddingX: 12, fontSize: 14, radius: 10, border: 1 },
+      card: { width: 350, padding: 24, titleSize: 20, radius: 10, border: 1 },
+    },
+  };
+}
+
 export function createDemoSiteReport() {
   return {
     app: SITE_EXTRACTOR_APP_ID,
@@ -247,6 +283,13 @@ function parseRawCssText(text) {
 export function parseSiteStyleInput(input) {
   const raw = String(input || "").trim();
   if (!raw) throw new Error("请先粘贴从网站提取的 JSON 或 CSS 样式代码。");
+
+  if (/^https?:\/\/ui\.shadcn\.com\/?/i.test(raw)) {
+    return createShadcnSiteReport();
+  }
+  if (/^https?:\/\/[^\s]+$/i.test(raw)) {
+    throw new Error(`检测到输入了网址「${raw}」。因浏览器跨域安全限制（CORS），纯前端无法直接静默抓取外部网页内容。\n请在打开该目标网站时点击书签栏「拆解当前网站」，或按 F12 运行控制台提取脚本自动复制。`);
+  }
 
   let parsed = null;
   try {
