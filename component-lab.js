@@ -1,7 +1,7 @@
 import {
   extractPaletteFromImageData,
   inspectComponentRegion,
-} from "./screenshot-analyzer.js?v=20261106b";
+} from "./screenshot-analyzer.js?v=20261106c";
 
 const SESSION_KEY = "design-sense-component-sessions-v1";
 const ZOOM_MIN = 0.5;
@@ -1243,6 +1243,28 @@ export function initComponentLab(root, { showToast, onSavePalette } = {}) {
     }
   });
 
+  function applyCustomValues(type, customValues = {}) {
+    const targetType = COMPONENT_TYPES[type] ? type : "button";
+    state.type = targetType;
+    state.view = "training";
+    state.mode = "free";
+    state.phase = "explore";
+    state.preview = "current";
+    state.revealed = false;
+    state.confirmed = false;
+    const targetConfig = COMPONENT_TYPES[targetType];
+    const nextValues = targetValues(targetConfig);
+    Object.entries(customValues || {}).forEach(([paramId, rawVal]) => {
+      const param = targetConfig.parameters.find((p) => p.id === paramId);
+      if (param && Number.isFinite(Number(rawVal))) {
+        nextValues[paramId] = clampParameterValue(param, Number(rawVal));
+      }
+    });
+    state.values[targetType] = nextValues;
+    render();
+    return targetConfig.zh;
+  }
+
   render();
-  return { refresh: render, sessionCount: () => state.sessions.length };
+  return { refresh: render, sessionCount: () => state.sessions.length, applyCustomValues };
 }

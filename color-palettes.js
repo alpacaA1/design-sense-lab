@@ -9,11 +9,17 @@ import {
   importColorPalettes,
   normalizeHex,
   saveColorPalette,
-} from "./color-palettes-store.js?v=20261106b";
+} from "./color-palettes-store.js?v=20261106c";
 import {
   extractPaletteFromImageData,
   samplePixelHex,
-} from "./screenshot-analyzer.js?v=20261106b";
+} from "./screenshot-analyzer.js?v=20261106c";
+import {
+  createDemoSiteReport,
+  getBookmarkletHref,
+  getConsoleExtractorScript,
+  parseSiteStyleInput,
+} from "./site-extractor.js?v=20261106c";
 
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -23,6 +29,7 @@ const icons = {
   edit: '<path d="m15 4 5 5M4 20l1-6L16 3l5 5L10 19Z"/>',
   apply: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m21 15-5-5L5 20"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"/>',
 };
 const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
 const escapeHtml = (text) => String(text ?? "")
@@ -130,10 +137,16 @@ function loadFileToImageData(file) {
   });
 }
 
-export function initColorPalettes(root, { showToast, getCurrentDocumentColors, onApplyToDocument }) {
+export function initColorPalettes(
+  root,
+  { showToast, getCurrentDocumentColors, onApplyToDocument, onCreateSiteTemplate, onApplySiteComponent },
+) {
   const state = createColorPalettesState();
   let selectedId = null;
   let editing = false;
+  let siteExtractorMode = false;
+  let siteReport = parseSiteStyleInput(JSON.stringify(createDemoSiteReport()));
+  let siteRawInput = "";
   let dirty = false;
   let query = "";
   let activeTag = "";
@@ -152,8 +165,9 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
 
   function canLeave() {
     if (dirty && !window.confirm("当前配色修改还未保存，确定放弃修改？")) return false;
-    if (editing) {
+    if (editing || siteExtractorMode) {
       editing = false;
+      siteExtractorMode = false;
       dirty = false;
       draftFields = null;
       screenshotContext = null;
@@ -169,6 +183,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       return false;
     }
     selectedId = null;
+    siteExtractorMode = false;
     editing = true;
     dirty = false;
     screenshotContext = meta.screenshotContext || null;
@@ -307,6 +322,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
             <p>记录纸张底色、主次文字与强调色的搭配尝试，支持上传或粘贴软件截图自动提取配色。</p>
           </div>
           <div class="palette-actions">
+            <button class="secondary-button" type="button" data-palette-action="site-extractor">${icon("globe")}拆解网站样式</button>
             <button class="secondary-button" type="button" data-palette-action="upload-screenshot">${icon("image")}从截图识别配色</button>
             <button class="secondary-button" type="button" data-palette-action="import">导入</button>
             <button class="secondary-button" type="button" data-palette-action="export">导出备份</button>
@@ -659,8 +675,116 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
     });
   }
 
+  function renderSiteExtractor() {
+    const r = siteReport;
+    root.innerHTML = `
+      <div class="color-palettes-page site-extractor-page">
+        <button class="palette-back" type="button" data-palette-action="back">${icon("back")}返回配色列表</button>
+        <header class="palette-page-heading">
+          <div>
+            <h1 tabindex="-1">拆解网站配色与样式</h1>
+            <p>由于浏览器跨域安全限制，无需后端代理，用书签小工具或控制台脚本即可读取任意网站真实渲染的 getComputedStyle 配色、字阶与组件尺寸。</p>
+          </div>
+          <div class="palette-actions">
+            <a class="secondary-button site-bookmarklet-link" href="${getBookmarkletHref()}" data-bookmarklet-link>拖到书签栏：拆解当前网站</a>
+            <button class="secondary-button" type="button" data-site-action="copy-script">${icon("copy")}复制控制台提取脚本</button>
+            <button class="secondary-button" type="button" data-site-action="load-demo">加载示例站点数据</button>
+          </div>
+        </header>
+
+        <div class="site-extractor-layout">
+          <section class="site-extractor-input-card" aria-label="粘贴网站拆解数据或 CSS 变量">
+            <div class="site-extractor-step-head">
+              <strong>第一步 · 粘贴提取到的 JSON 或网站 CSS 变量</strong>
+              <span>支持粘贴上方脚本自动复制的 JSON，或直接从开发者工具复制 <code>:root { --bg: ... }</code> 样式代码。</span>
+            </div>
+            <textarea id="site-extractor-input" rows="7" placeholder="在此粘贴从目标网站提取的 JSON，或直接粘贴包含 #RRGGBB / rgb() / font-size / border-radius 的 CSS 代码…">${escapeHtml(siteRawInput)}</textarea>
+            <p id="site-extractor-error" class="palette-form-error" role="alert" hidden></p>
+            <div class="site-extractor-input-actions">
+              <button class="primary-button compact" type="button" data-site-action="parse">解析网站样式</button>
+              <span>已在下方展示「${escapeHtml(r.site.title)}」的拆解结果</span>
+            </div>
+          </section>
+
+          <section class="site-extractor-report" aria-label="网站样式拆解报告">
+            <header class="site-report-head">
+              <div>
+                <span class="site-report-kicker">WEBSITE STYLE REPORT · ${escapeHtml(r.site.hostname)}</span>
+                <h2>${escapeHtml(r.site.title)}</h2>
+              </div>
+              <div class="site-report-actions">
+                <button class="secondary-button" type="button" data-site-action="save-palette">存入配色积累</button>
+                <button class="primary-button compact" type="button" data-site-action="save-doc-template">${icon("apply")}生成并应用文档模版</button>
+              </div>
+            </header>
+
+            <div class="site-report-grid">
+              <div class="site-report-block">
+                <h3>1. 四角色语义配色</h3>
+                <div class="palette-strip-group">
+                  ${COLOR_ROLES.map((role) => {
+                    const hex = r.colors[role.id];
+                    return `
+                      <span class="palette-role-pill">
+                        <i class="palette-role-dot" style="background:${escapeHtml(hex)}"></i>
+                        <small>${escapeHtml(role.label)}</small>
+                        <code>${escapeHtml(hex)}</code>
+                      </span>`;
+                  }).join("")}
+                </div>
+                ${renderSpecimenCard(r.colors, r.site.title)}
+                ${renderContrastPanel(r.colors)}
+              </div>
+
+              <div class="site-report-block">
+                <h3>2. 排版与字阶关系 (Typography Scale)</h3>
+                <dl class="site-metric-list">
+                  <div><dt>主标题 (H1)</dt><dd>${r.typography.titleSize}px · 字重 ${escapeHtml(r.typography.titleWeight)}</dd></div>
+                  <div><dt>小节标题 (H2)</dt><dd>${r.typography.sectionTitleSize}px · 比例 ${r.typography.sectionScaleRatio}×</dd></div>
+                  <div><dt>正文与行高</dt><dd>${r.typography.bodySize}px / 行高 ${r.typography.lineHeight}</dd></div>
+                  <div><dt>标题/正文字阶比</dt><dd>${r.typography.typeScaleRatio}× · 段距 ${r.typography.paragraphGap}px</dd></div>
+                  <div><dt>字体栈</dt><dd class="site-font-stack">${escapeHtml(r.typography.fontFamilyStack || "系统默认字体")}</dd></div>
+                </dl>
+
+                <h3>3. 核心组件尺寸与圆角 (Component Specs)</h3>
+                <div class="site-component-cards">
+                  <div class="site-comp-card">
+                    <div>
+                      <strong>按钮 Button</strong>
+                      <span>高 ${r.components.button.height}px · 水平内边距 ${r.components.button.paddingX}px · 字号 ${r.components.button.fontSize}px · 圆角 ${r.components.button.radius}px</span>
+                    </div>
+                    <button class="secondary-button" type="button" data-site-action="apply-component" data-comp-type="button">送入组件沙盒</button>
+                  </div>
+                  <div class="site-comp-card">
+                    <div>
+                      <strong>输入框 Input</strong>
+                      <span>高 ${r.components.input.height}px · 内边距 ${r.components.input.paddingX}px · 圆角 ${r.components.input.radius}px · 边框 ${r.components.input.border}px</span>
+                    </div>
+                    <button class="secondary-button" type="button" data-site-action="apply-component" data-comp-type="input">送入组件沙盒</button>
+                  </div>
+                  <div class="site-comp-card">
+                    <div>
+                      <strong>卡片 Card</strong>
+                      <span>宽 ${r.components.card.width}px · 内边距 ${r.components.card.padding}px · 标题 ${r.components.card.titleSize}px · 圆角 ${r.components.card.radius}px</span>
+                    </div>
+                    <button class="secondary-button" type="button" data-site-action="apply-component" data-comp-type="card">送入组件沙盒</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>`;
+
+    root.querySelector("[data-bookmarklet-link]")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      showToast("请将此按钮拖拽到浏览器书签栏，在目标网页点击书签即可一键提取；或点击右侧复制控制台脚本");
+    });
+  }
+
   function render() {
-    if (editing) renderEditor(current());
+    if (siteExtractorMode) renderSiteExtractor();
+    else if (editing) renderEditor(current());
     else if (current()) renderDetail(current());
     else renderList();
   }
@@ -724,7 +848,72 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       return;
     }
 
+    const siteAction = button.dataset.siteAction;
+    if (siteAction === "copy-script") {
+      await writeClipboard(getConsoleExtractorScript(), "已复制控制台提取脚本，可在目标网页按 F12 粘贴到 Console 运行");
+      return;
+    }
+    if (siteAction === "load-demo") {
+      const demo = createDemoSiteReport();
+      siteRawInput = JSON.stringify(demo, null, 2);
+      siteReport = parseSiteStyleInput(siteRawInput);
+      render();
+      showToast("已加载示例站点拆解数据");
+      return;
+    }
+    if (siteAction === "parse") {
+      const inputEl = root.querySelector("#site-extractor-input");
+      const errEl = root.querySelector("#site-extractor-error");
+      siteRawInput = inputEl?.value || "";
+      try {
+        siteReport = parseSiteStyleInput(siteRawInput);
+        render();
+        showToast(`已解析「${siteReport.site.title}」的配色、字阶与组件尺寸`);
+      } catch (error) {
+        if (errEl) {
+          errEl.textContent = error.message;
+          errEl.hidden = false;
+        } else {
+          showToast(error.message);
+        }
+      }
+      return;
+    }
+    if (siteAction === "save-palette") {
+      const r = siteReport;
+      siteExtractorMode = false;
+      openDraftWithColors(r.colors, {
+        title: `${r.site.title} · 网站配色`,
+        tags: ["网站拆解", r.site.hostname].filter(Boolean),
+        notes: [
+          r.site.url ? `来源网址：${r.site.url}` : "",
+          `排版字阶：H1 ${r.typography.titleSize}px / H2 ${r.typography.sectionTitleSize}px / 正文 ${r.typography.bodySize}px（行高 ${r.typography.lineHeight}，字阶比 ${r.typography.typeScaleRatio}×）`,
+          `组件规范：按钮高 ${r.components.button.height}px、内边距 ${r.components.button.paddingX}px、圆角 ${r.components.button.radius}px；卡片内边距 ${r.components.card.padding}px、圆角 ${r.components.card.radius}px。`,
+        ].filter(Boolean).join("\n"),
+      });
+      return;
+    }
+    if (siteAction === "save-doc-template") {
+      onCreateSiteTemplate?.(siteReport);
+      return;
+    }
+    if (siteAction === "apply-component") {
+      const compType = button.dataset.compType || "button";
+      onApplySiteComponent?.(compType, siteReport.components[compType], siteReport.site.title);
+      return;
+    }
+
     const action = button.dataset.paletteAction;
+    if (action === "site-extractor") {
+      if (!canLeave()) return;
+      selectedId = null;
+      editing = false;
+      siteExtractorMode = true;
+      render();
+      resetScroll();
+      focusHeading();
+      return;
+    }
     if (action === "new" || action === "edit") {
       if (state.readError) {
         showToast(state.error);
@@ -777,6 +966,7 @@ export function initColorPalettes(root, { showToast, getCurrentDocumentColors, o
       }
     } else if (action === "back" || action === "cancel") {
       if (!canLeave()) return;
+      siteExtractorMode = false;
       if (action === "back" || !current()) selectedId = null;
       draftFields = null;
       screenshotContext = null;

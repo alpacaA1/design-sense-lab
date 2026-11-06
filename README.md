@@ -39,6 +39,7 @@ python3 -m http.server 4317
 - 浏览器本地持久化、响应式布局、键盘操作和减少动态支持
 - 配色积累：围绕纸张底色、主要文字、次级文字与强调色四角色语义色板，记录搭配心得与场景标签，实时计算对比度并渲染微缩样张预览；支持上传或 `Ctrl/Cmd + V` 粘贴软件截图自动聚类识别配色、点击截图吸管取色，并与文档排版双向联动（从文档一键存入配色、将配色一键应用到当前文档）及 JSON 备份合并导入导出；直接访问 `#colors` 可打开配色列表
 - 截图组件拆解（Component Lab 内置）：支持上传或粘贴软件截图，切换 `@1x / @2x (Retina) / @3x` 倍率，在截图上框选或点选任意组件即可自动边缘吸附、拟合四角曲率半径并计算 CSS 宽 × 高、圆角、内边距、边框与估计字号，一键带入探索沙盒 1:1 复刻或转存截图配色
+- 拆解网站配色与样式（配色积累内置）：提供浏览器书签小工具（Bookmarklet）与控制台提取脚本，在任意网站一键提取真实渲染的 `getComputedStyle` 四角色配色、排版字阶（H1/H2/正文/行高/字体栈/字阶比）以及按钮、输入框、卡片组件尺寸；也支持直接粘贴网站 `:root` CSS 变量代码，一键转化为配色积累、生成并应用为文档排版模版，或将提取出的组件尺寸送入组件训练探索沙盒
 - 提示词笔记：标题、原文、自己的理解与可选技术标签，支持新建、编辑、全文检索、技术筛选和一键复制
 - 笔记首次打开提供可编辑的水彩动画提示词示例；数据独立保存在当前浏览器，可导出 JSON 备份并在另一台设备合并导入，重复内容跳过、冲突内容另存
 - 保存和导入前检查本地数据是否已被另一窗口更新；若有变化，保留编辑内容并提示复制、刷新，避免旧页面覆盖新记录
@@ -53,6 +54,7 @@ python3 -m http.server 4317
 - `styles-library.js`：My Styles 模版筛选、恢复、仅用配色与转存
 - `component-lab.js`：组件训练配置、预览、误差、本地记录与截图组件拆解
 - `screenshot-analyzer.js`：纯前端截图色彩聚类、角色映射、组件边缘吸附与圆角曲率拟合
+- `site-extractor.js`：网站样式提取书签脚本生成、JSON/CSS 样式解析与文档模版/组件参数映射
 - `app.js`：工作台协调
 - `color-palettes.js` / `color-palettes-store.js` / `color-palettes.css`：配色积累、对比度刻度、微缩样张与独立存储
 - `prompt-notes.js` / `prompt-notes-store.js` / `prompt-notes.css`：轻量提示词笔记、独立本地存储与样式
@@ -63,6 +65,7 @@ python3 -m http.server 4317
 node --experimental-default-type=module tests/state_test.mjs
 node --experimental-default-type=module tests/color_palettes_test.mjs
 node --experimental-default-type=module tests/screenshot_analyzer_test.mjs
+node --experimental-default-type=module tests/site_extractor_test.mjs
 node --experimental-default-type=module tests/prompt_notes_test.mjs
 ```
 

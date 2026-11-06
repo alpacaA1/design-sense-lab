@@ -92,6 +92,29 @@ with sync_playwright() as playwright:
     # Return to Color Palettes
     page.get_by_role("button", name="配色积累", exact=True).click()
 
+    # Test Website Style Extractor
+    page.locator('[data-palette-action="site-extractor"]').click()
+    expect(page.get_by_role("heading", name="拆解网站配色与样式", exact=True)).to_be_visible()
+    page.locator('[data-site-action="load-demo"]').click()
+    expect(page.locator(".site-report-head h2")).to_have_text("Linear / Editorial Docs 示例站点")
+    page.screenshot(path=str(ARTIFACTS / "site-extractor-desktop.png"))
+
+    # Generate & apply document template from extracted website
+    page.locator('[data-site-action="save-doc-template"]').click()
+    expect(page.locator("#workspace")).to_be_visible()
+    expect(page.locator("#style-count")).to_have_text("2")
+
+    # Re-open Website Style Extractor and send Button specs to Component Lab sandbox
+    page.get_by_role("button", name="配色积累", exact=True).click()
+    page.locator('[data-palette-action="site-extractor"]').click()
+    page.locator('[data-site-action="apply-component"][data-comp-type="button"]').click()
+    expect(page.locator("#component-lab")).to_be_visible()
+    expect(page.locator('input[type="number"][data-training-param="height"]')).to_have_value("36")
+    expect(page.locator('input[type="number"][data-training-param="paddingX"]')).to_have_value("14")
+
+    # Return to Color Palettes list
+    page.get_by_role("button", name="配色积累", exact=True).click()
+
     # Export and re-import palettes backup
     with page.expect_download() as palette_dl_info:
         page.get_by_role("button", name="导出备份", exact=True).click()

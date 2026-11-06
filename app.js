@@ -1,6 +1,6 @@
-import { DOCUMENT_TYPES } from "./config.js?v=20261106b";
-import { renderControls } from "./controls.js?v=20261106b";
-import { renderDocument } from "./renderers.js?v=20261106b";
+import { DOCUMENT_TYPES } from "./config.js?v=20261106c";
+import { renderControls } from "./controls.js?v=20261106c";
+import { renderDocument } from "./renderers.js?v=20261106c";
 import {
   applyColorsToCurrentDocument,
   applyStyle,
@@ -15,9 +15,10 @@ import {
   setCategory,
   setDocumentType,
   setParameter,
-} from "./state.js?v=20261106b";
-import { renderStyleFilters, renderStyles } from "./styles-library.js?v=20261106b";
-import { initComponentLab } from "./component-lab.js?v=20261106b";
+} from "./state.js?v=20261106c";
+import { renderStyleFilters, renderStyles } from "./styles-library.js?v=20261106c";
+import { initComponentLab } from "./component-lab.js?v=20261106c";
+import { mapSiteReportToDocumentValues } from "./site-extractor.js?v=20261106c";
 
 const state = createAppState();
 
@@ -244,7 +245,7 @@ async function showColorPalettes(draftColors = null, draftMeta = null) {
   elements.colorPalettes.hidden = false;
   if (!colorPalettesLoading) {
     elements.colorPalettes.textContent = "正在打开配色积累…";
-    colorPalettesLoading = import("./color-palettes.js?v=20261106b").then(({ initColorPalettes }) => {
+    colorPalettesLoading = import("./color-palettes.js?v=20261106c").then(({ initColorPalettes }) => {
       colorPalettes = initColorPalettes(elements.colorPalettes, {
         showToast,
         getCurrentDocumentColors,
@@ -253,6 +254,24 @@ async function showColorPalettes(draftColors = null, draftMeta = null) {
           showWorkspace();
           renderWorkspace();
           showToast(`已将「${paletteTitle}」应用到当前${DOCUMENT_TYPES[state.currentType].label}`);
+        },
+        onCreateSiteTemplate(report) {
+          const mapped = mapSiteReportToDocumentValues(report);
+          Object.entries(mapped).forEach(([paramId, value]) => {
+            setParameter(state, paramId, value);
+          });
+          persistWorkspace(state);
+          const styleName = `${report.site.title} · 网站模版`;
+          const styleNote = `拆解自 ${report.site.url || report.site.hostname} · H1/正文比 ${report.typography.typeScaleRatio}×`;
+          saveCurrentStyle(state, styleName, styleNote);
+          showWorkspace();
+          renderWorkspace();
+          showToast(`已生成模版「${styleName}」并应用到当前${DOCUMENT_TYPES[state.currentType].label}`);
+        },
+        onApplySiteComponent(type, values, siteTitle) {
+          showComponentLab();
+          const zh = componentLab.applyCustomValues(type, values);
+          showToast(`已将「${siteTitle}」的${zh}尺寸送入组件训练探索沙盒`);
         },
       });
     }).catch(() => {
@@ -277,7 +296,7 @@ async function showPromptNotes() {
   elements.promptNotes.hidden = false;
   if (!promptNotesLoading) {
     elements.promptNotes.textContent = "正在打开提示词笔记…";
-    promptNotesLoading = import("./prompt-notes.js?v=20261106b").then(({ initPromptNotes }) => {
+    promptNotesLoading = import("./prompt-notes.js?v=20261106c").then(({ initPromptNotes }) => {
       promptNotes = initPromptNotes(elements.promptNotes, { showToast });
     }).catch(() => {
       elements.promptNotes.textContent = "笔记模块加载失败，请刷新后重试。";

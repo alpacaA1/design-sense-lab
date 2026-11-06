@@ -1,4 +1,4 @@
-import { normalizeHex } from "./color-palettes-store.js?v=20261106b";
+import { normalizeHex } from "./color-palettes-store.js?v=20261106c";
 
 function rgbToHex(r, g, b) {
   const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)));
