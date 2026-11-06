@@ -9,7 +9,7 @@ import {
   importColorPalettes,
   normalizeHex,
   saveColorPalette,
-} from "./color-palettes-store.js";
+} from "./color-palettes-store.js?v=20261106";
 
 const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',

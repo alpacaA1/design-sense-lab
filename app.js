@@ -1,6 +1,6 @@
-import { DOCUMENT_TYPES } from "./config.js";
-import { renderControls } from "./controls.js";
-import { renderDocument } from "./renderers.js";
+import { DOCUMENT_TYPES } from "./config.js?v=20261106";
+import { renderControls } from "./controls.js?v=20261106";
+import { renderDocument } from "./renderers.js?v=20261106";
 import {
   applyColorsToCurrentDocument,
   applyStyle,
@@ -15,9 +15,9 @@ import {
   setCategory,
   setDocumentType,
   setParameter,
-} from "./state.js";
-import { renderStyleFilters, renderStyles } from "./styles-library.js";
-import { initComponentLab } from "./component-lab.js";
+} from "./state.js?v=20261106";
+import { renderStyleFilters, renderStyles } from "./styles-library.js?v=20261106";
+import { initComponentLab } from "./component-lab.js?v=20261106";
 
 const state = createAppState();
 
@@ -244,7 +244,7 @@ async function showColorPalettes(draftColors = null, draftMeta = null) {
   elements.colorPalettes.hidden = false;
   if (!colorPalettesLoading) {
     elements.colorPalettes.textContent = "正在打开配色积累…";
-    colorPalettesLoading = import("./color-palettes.js").then(({ initColorPalettes }) => {
+    colorPalettesLoading = import("./color-palettes.js?v=20261106").then(({ initColorPalettes }) => {
       colorPalettes = initColorPalettes(elements.colorPalettes, {
         showToast,
         getCurrentDocumentColors,
@@ -277,7 +277,7 @@ async function showPromptNotes() {
   elements.promptNotes.hidden = false;
   if (!promptNotesLoading) {
     elements.promptNotes.textContent = "正在打开提示词笔记…";
-    promptNotesLoading = import("./prompt-notes.js").then(({ initPromptNotes }) => {
+    promptNotesLoading = import("./prompt-notes.js?v=20261106").then(({ initPromptNotes }) => {
       promptNotes = initPromptNotes(elements.promptNotes, { showToast });
     }).catch(() => {
       elements.promptNotes.textContent = "笔记模块加载失败，请刷新后重试。";
@@ -438,3 +438,8 @@ componentLab = initComponentLab(elements.componentLab, { showToast });
 renderWorkspace();
 if (location.hash === "#prompts") showPromptNotes();
 else if (location.hash === "#colors") showColorPalettes();
+
+window.addEventListener("hashchange", () => {
+  if (location.hash === "#prompts" && document.body.dataset.studio !== "prompts") showPromptNotes();
+  else if (location.hash === "#colors" && document.body.dataset.studio !== "colors") showColorPalettes();
+});
